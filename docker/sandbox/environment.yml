@@ -1,0 +1,74 @@
+# The analysis environment every agent gets (conda env "bio", on PATH by default).
+# Deliberately a minimal *canonical* toolset: agents can add anything else with
+# `mamba install -c bioconda -c conda-forge <pkg>` or `pip install <pkg>`.
+# Versions are left to the solver; the solved environment is exported to
+# /opt/sandbox/conda-env.lock.yml in the image and copied into every run's manifest.
+name: bio
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # --- Python stack
+  - python=3.12
+  - pip
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - statsmodels
+  - matplotlib
+  - seaborn
+  - pyarrow
+  - openpyxl
+  - requests
+  - tqdm
+  - biopython
+  - pysam
+  - pybigwig
+  - pyfaidx
+  - scanpy
+  - anndata
+  - h5py
+  - python-igraph
+  - leidenalg
+  - pydeseq2
+  - gseapy
+  # --- R + core Bioconductor
+  - r-base
+  - r-data.table
+  - bioconductor-deseq2
+  - bioconductor-edger
+  - bioconductor-limma
+  # --- Sequence / alignment / quantification
+  - samtools
+  - bcftools
+  - htslib
+  - bedtools
+  - minimap2
+  - bwa
+  - bowtie2
+  - hisat2
+  - star
+  - salmon
+  - kallisto
+  - subread
+  - fastp
+  - fastqc
+  - cutadapt
+  - seqkit
+  - gffread
+  # --- Homology / annotation
+  - blast
+  - mmseqs2
+  - diamond
+  # --- Epigenomics / tracks / motifs
+  - deeptools
+  - macs3
+  - homer
+  - meme
+  - ucsc-bigwigtobedgraph
+  - ucsc-bedgraphtobigwig
+  - ucsc-liftover
+  # --- Variants / population genetics
+  - vcftools
+  - plink2

@@ -1,0 +1,11 @@
+# Benchmark data (contains the answer rubrics) and run outputs: never commit.
+data/
+runs/
+.env
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+.ruff_cache/
