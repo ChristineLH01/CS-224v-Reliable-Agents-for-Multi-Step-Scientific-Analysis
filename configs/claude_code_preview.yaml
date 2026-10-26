@@ -6,6 +6,7 @@ concurrency: 2        # 2 × (4 CPUs, 3.5 GB) fits Docker Desktop's 8 CPUs / 7.6
 
 dataset:
   name: preview
+  delete_after_task: true   # each question's data is downloaded before its trials, deleted after
 
 agent:
   type: claude_code
@@ -19,10 +20,11 @@ agent:
 sandbox:
   cpus: 4
   memory: 3.5g
-  timeout_s: 1800     # 30 min wall clock per trial
+  timeout_s: 3600     # 1 h wall clock per trial
   network: allowlist
+  keep_workspace: false   # delete each trial's workspace (workspace_files.tsv lists it)
 
 grader:
   auto: true
-  model: claude-opus-5-5
+  model: gpt-6-sol    # via the LiteLLM proxy in LITELLM_BASE_URL (.env)
   effort: medium

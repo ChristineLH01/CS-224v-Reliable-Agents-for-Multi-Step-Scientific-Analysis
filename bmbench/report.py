@@ -41,7 +41,7 @@ def collect(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         if g is not None:
             rec.update(score=g.get("score"), correct=g.get("correct"), cheated=g.get("cheated"),
                        normalized_answer=g.get("normalized_answer"),
-                       denied=sum(((g.get("network") or {}).get("denied") or {}).values()))
+                       judge_model=(g.get("judge") or {}).get("model"))
             graded.append(rec)
         every.append(rec)
     return graded, every
@@ -71,7 +71,7 @@ def write_report(run_dir: Path) -> dict[str, Any]:
     return metrics
 
 
-def _setup_line(run_dir: Path, n_questions: int) -> str:
+def _setup_line(run_dir: Path, n_questions: int, judge: str) -> str:
     """One line saying what was tested, from the run's config and manifest."""
     cfg_path, man_path = run_dir / "config.yaml", run_dir / "manifest.json"
     cfg = (yaml.safe_load(cfg_path.read_text(encoding="utf-8")) if cfg_path.is_file() else None) or {}
@@ -85,61 +85,60 @@ def _setup_line(run_dir: Path, n_questions: int) -> str:
         f"{n_questions} questions × {n} trials each · Claude Code {version} (`{agent.get('model', '?')}`, "
         f"effort `{agent.get('effort', 'default')}`) · per trial: {round((sb.get('timeout_s') or 0) / 60)} min, "
         f"{sb.get('cpus', '?')} CPUs, {fmt_memory(sb.get('memory', '?'))} RAM, {network}, no web search · "
-        "graded by a Claude judge against the answer key; a trial scores 0 if it looked up the source dataset."
+        f"graded by `{judge}` against the answer key; a trial scores 0 if it looked up the source dataset."
     )
+
+
+def _by_question(rows: list[dict[str, Any]], key: str) -> str:
+    """'hb024 ×2, hb035 ×1' for the questions where `key` is non-zero."""
+    return ", ".join(f"{t['task_id']} ×{t[key]}" for t in rows if t[key])
 
 
 def _markdown(run_dir: Path, metrics: dict[str, Any], tasks: list[dict[str, Any]],
               graded: list[dict[str, Any]], every: list[dict[str, Any]]) -> str:
-    lines = [f"# Report: `{run_dir.name}`", "", _setup_line(run_dir, len({r["task_id"] for r in every})), ""]
+    judges = Counter(r.get("judge_model") for r in graded if r.get("judge_model"))
+    judge = judges.most_common(1)[0][0] if judges else "?"
+    lines = [f"# Report: `{run_dir.name}`", "", _setup_line(run_dir, len({r["task_id"] for r in every}), judge), ""]
     ungraded = sum(1 for r in every if not r["graded"])
     lines += [f"Trials found: {len(every)} ({ungraded} not graded yet).", ""]
 
-    k = (metrics.get("all") or {}).get("trials_per_task_min", "k")
+    k = (metrics.get("all") or {}).get("k", "k")
     lines += ["## Summary", "",
-              f"| split | questions | trials | accuracy (95% CI) | pass@{k} | pass^{k} | majority | answer agreement | "
-              "outcome consistency | reliable / brittle | mean cost | mean min |",
-              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+              f"| split | questions | trials | accuracy | pass@{k} | pass^{k} | answer agreement | mean cost | mean min |",
+              "|---|---|---|---|---|---|---|---|---|"]
     names = {"all": "all", "human_solvable=yes": "human-solvable", "human_solvable=no": "human-hard"}
     for split, m in metrics.items():
         if not m.get("n_tasks"):
             continue
-        kk = m["trials_per_task_min"]
-        lo, hi = m["accuracy_ci95"]
         lines.append(
-            f"| {names.get(split, split)} | {m['n_tasks']} | {m['n_trials']} | {_pct(m['accuracy'])} ({_pct(lo)}–{_pct(hi)}) | "
-            f"{_pct(m['pass_at_k'].get(kk))} | {_pct(m['pass_hat_k'].get(kk))} | "
-            f"{_pct(m['majority_vote_accuracy'])} | {_pct(m['answer_agreement'])} | "
-            f"{_pct(m['outcome_consistency'])} | {m['reliable_tasks']} / {m['brittle_tasks']} | "
+            f"| {names.get(split, split)} | {m['n_tasks']} | {m['n_trials']} | {_pct(m['accuracy'])} | "
+            f"{_pct(m['pass_at_k'])} | {_pct(m['pass_hat_k'])} | {_pct(m['answer_agreement'])} | "
             f"${_num(m['cost_usd_mean'])} | {_num(m['minutes_mean'], '{:.1f}')} |"
         )
     if metrics.get("all", {}).get("n_tasks"):
         m = metrics["all"]
-        r = m["rates"]
-        blocked = sum(rec.get("denied") or 0 for rec in graded)
-        statuses = ", ".join(f"{s} {n}" for s, n in Counter(rec.get("status") for rec in every).items())
-        incomplete = sum(1 for rec in every if rec.get("cost_incomplete"))
-        hist = ", ".join(f"{c} ({n} question{'s' if n != 1 else ''})"
-                         for c, n in sorted(m["solve_histogram"].items(), key=lambda kv: -int(kv[0].split("/")[0])))
-        lines += ["",
-                  f"Correct trials per question: {hist} · statuses: {statuses}",
-                  f"Rates: timed out {_pct(r['timed_out'])}, nudged {_pct(r['nudged'])}, no answer {_pct(r['no_answer'])}, "
-                  f"cheated {_pct(r['cheated'])}, agent error {_pct(r['agent_error'])} · blocked network requests: {blocked}",
-                  f"Total cost (API-price estimate): ${_num(m['cost_usd_total'])}"
-                  + (f" (lower bound: {incomplete} timed-out trial(s) did not report their cost)" if incomplete else "")]
+        hist = ", ".join(f"{c} ({n} question{'s' if n != 1 else ''})" for c, n in m["solve_histogram"].items())
+        context = [f"timed out {m['timed_out']} of {m['n_trials']} trials"
+                   + (f" ({_by_question(tasks, 'timed_out')})" if m["timed_out"] else ""),
+                   f"flagged for cheating {m['cheated']}" + (f" ({_by_question(tasks, 'cheated')})" if m["cheated"] else "")]
+        incomplete = sum(1 for rec in graded if rec.get("cost_incomplete"))
+        lines += ["", f"Correct trials per question: {hist}", "", "Context: " + " · ".join(context)]
+        if incomplete:
+            lines += ["", f"Mean cost is a lower bound: {incomplete} timed-out trial(s) did not report their cost."]
 
     lines += ["", "## Per question", "", "| question | human-solvable | correct | agreement | answers (✓/✗ per trial) | "
-              "mean cost | mean min |", "|---|---|---|---|---|---|---|"]
+              "notes | mean cost | mean min |", "|---|---|---|---|---|---|---|---|"]
     for t in tasks:
         cells = " · ".join(f"{'✓' if s else '✗'} {(a or '(none)')[:40]}" for a, s in zip(t["answers"], t["scores"], strict=True))
+        notes = ", ".join(f"{t[key]} {label}" for key, label in (("timed_out", "timed out"), ("cheated", "cheated"))
+                          if t[key])
         lines.append(f"| {t['task_id']} | {t['human_solvable']} | {t['correct']}/{t['n']} | "
-                     f"{_pct(t['answer_agreement'])} | {cells.replace('|', '/')} | "
+                     f"{_pct(t['answer_agreement'])} | {cells.replace('|', '/')} | {notes or '–'} | "
                      f"${_num(t['mean_cost_usd'])} | {_num(t['mean_minutes'], '{:.1f}')} |")
 
     lines += ["", "**Columns:** accuracy = share of trials that were correct (each question weighs the same) · "
-              f"pass@{k} = solved in at least one of the {k} trials · pass^{k} = solved in all {k} · "
-              "majority = the most common answer is correct · answer agreement = share of trials giving the "
-              "question's most common answer · outcome consistency = share of questions whose trials are all right "
-              "or all wrong · reliable = questions solved in at least 4 of 5 trials, brittle = in only 1–2 · cost = Claude Code's "
-              "API-price estimate (not what a subscription is billed)."]
+              f"pass@{k} = share of questions solved in at least one of the {k} trials · pass^{k} = share solved "
+              f"in all {k} · answer agreement = share of trials giving the question's most common answer, right or "
+              "wrong · cost = Claude Code's API-price estimate per trial (not what a subscription is billed) · "
+              "timed out = hit the time limit (the agent then got one turn to give its best answer)."]
     return "\n".join(lines) + "\n"

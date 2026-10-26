@@ -26,6 +26,7 @@ source = { editable = "." }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "pyyaml" },
+    { name = "truststore" },
 ]
 
 [package.dev-dependencies]
@@ -37,6 +38,7 @@ dev = [
 requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.24" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "truststore", specifier = ">=0.10" },
 ]
 
 [package.metadata.requires-dev]

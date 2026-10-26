@@ -3,8 +3,8 @@
 The invocation is plain headless Claude Code: its own system prompt, tools,
 context compaction and subagents. The harness adds only what headless operation
 requires (no permission prompts, machine-readable output, a session id so a
-timed-out run can be resumed for a final answer) and the evaluation controls
-documented in the README (model/effort, WebSearch off, Bash timeouts).
+timed-out run can be resumed for a final answer) and a few evaluation controls
+(model/effort, WebSearch off, Bash timeouts).
 """
 
 from __future__ import annotations

@@ -7,8 +7,9 @@ sees only what it needs:
   1. correctness -- question, rubric, the extracted answer (+ final message as context)
   2. cheating    -- question, every tool call, regex pre-flags, the proxy log
 
-Both judges are `claude -p` with no tools, run in a throwaway sandbox container:
-the same auth as the agent, no API key, nothing from the host's ~/.claude.
+Both judges are one chat-completions call to a model from another family than the
+agent (default GPT-6 Sol), through the OpenAI-compatible LiteLLM proxy named in
+LITELLM_BASE_URL. The call runs on the host; the key never enters a sandbox.
 """
 
 from __future__ import annotations
@@ -18,15 +19,18 @@ import datetime as dt
 import json
 import os
 import re
-import uuid
+import ssl
+import urllib.error
+import urllib.request
 from collections import Counter
+from functools import cache
 from pathlib import Path
 from typing import Any
 
-from bmbench.agents.base import classify_error
-from bmbench.config import SECRET_ENV, GraderConfig, resolve
+import truststore
+
+from bmbench.config import JUDGE_KEY_ENV, JUDGE_URL_ENV, GraderConfig, resolve
 from bmbench.dataset import Problem
-from bmbench.sandbox import LABEL, run_cmd
 from bmbench.trajectory import Segment, Step, action_log, tool_inputs_text
 
 JUDGE_SYSTEM = (
@@ -43,6 +47,7 @@ ANSWER_SCHEMA = {
         "rationale": {"type": "string"},
     },
     "required": ["correct", "extracted_answer", "normalized_answer", "rationale"],
+    "additionalProperties": False,
 }
 
 AUDIT_SCHEMA = {
@@ -53,6 +58,7 @@ AUDIT_SCHEMA = {
         "rationale": {"type": "string"},
     },
     "required": ["cheated", "evidence", "rationale"],
+    "additionalProperties": False,
 }
 
 #: (pattern, label). Applied to tool *inputs* only -- what the agent did, not what
@@ -150,50 +156,76 @@ def _clip(text: str, limit: int) -> str:
 # -- the judge call ------------------------------------------------------------
 
 
-async def judge(prompt: str, schema: dict, cfg: GraderConfig, image: str, retries: int = 2) -> dict[str, Any]:
-    """One tool-less `claude -p` call in a throwaway container; returns its parsed result."""
+def judge_endpoint() -> tuple[str, str]:
+    """(chat-completions URL, API key) from the environment / .env."""
+    base = os.environ.get(JUDGE_URL_ENV, "").strip().rstrip("/")
+    key = os.environ.get(JUDGE_KEY_ENV, "").strip()
+    if not base or not key:
+        raise RuntimeError(f"judge not configured: set {JUDGE_URL_ENV} and {JUDGE_KEY_ENV} in .env")
+    return (base if base.endswith("/chat/completions") else base + "/chat/completions"), key
+
+
+@cache
+def _tls() -> ssl.SSLContext:
+    """The OS trust store (macOS keychain, Linux system CAs). python.org's macOS build
+    ships without CA certificates, so the default context cannot verify anything."""
+    return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+
+def _post(url: str, key: str, body: dict[str, Any], timeout_s: float) -> tuple[dict[str, Any], str | None]:
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(), method="POST",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout_s, context=_tls()) as resp:
+        return json.loads(resp.read()), resp.headers.get("x-litellm-response-cost")
+
+
+def _cost(usage: dict[str, Any], reported: str | None, cfg: GraderConfig) -> float:
+    """The proxy's own figure when it sends one, else tokens × the configured prices."""
+    try:
+        if reported and float(reported) > 0:
+            return float(reported)
+    except ValueError:
+        pass
+    usd_in, usd_out = cfg.usd_per_mtok
+    return (int(usage.get("prompt_tokens") or 0) * usd_in + int(usage.get("completion_tokens") or 0) * usd_out) / 1e6
+
+
+async def judge(prompt: str, schema: dict, cfg: GraderConfig, retries: int = 3) -> dict[str, Any]:
+    """One chat-completions call with a strict JSON-schema reply; returns the parsed verdict."""
+    url, key = judge_endpoint()
+    body: dict[str, Any] = {
+        "model": cfg.model,
+        "messages": [{"role": "system", "content": JUDGE_SYSTEM}, {"role": "user", "content": prompt}],
+        "response_format": {"type": "json_schema", "json_schema": {"name": "verdict", "strict": True, "schema": schema}},
+    }
+    if cfg.effort:
+        body["reasoning_effort"] = cfg.effort
     last_error = ""
     for attempt in range(retries + 1):
-        name = f"bmb-judge-{uuid.uuid4().hex[:10]}"
-        argv = ["docker", "run", "--rm", "-i", "--name", name, "--label", f"{LABEL}=1", "-u", "agent"]
-        for k in SECRET_ENV:
-            if os.environ.get(k):
-                argv += ["-e", k]
-        argv += [image, "timeout", "-k", "10", str(cfg.timeout_s), "claude", "-p", "--model", cfg.model]
-        if cfg.effort:
-            argv += ["--effort", cfg.effort]
-        argv += ["--tools", "", "--no-session-persistence", "--output-format", "json",
-                 "--json-schema", json.dumps(schema), "--system-prompt", JUDGE_SYSTEM]
-        proc = await asyncio.create_subprocess_exec(
-            *argv, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        if attempt:
+            await asyncio.sleep(10 * attempt)
         try:
-            out, err = await asyncio.wait_for(proc.communicate(prompt.encode()), timeout=cfg.timeout_s + 60)
-        except TimeoutError:
-            await run_cmd("docker", "rm", "-f", name, check=False)
-            proc.kill()
-            await proc.wait()
-            last_error = "judge timed out"
+            data, reported_cost = await asyncio.to_thread(_post, url, key, body, cfg.timeout_s)
+        except urllib.error.HTTPError as e:
+            last_error = f"HTTP {e.code}: {e.read().decode(errors='replace')[:1000]}"
+            if e.code in (400, 401, 403, 404):
+                break  # a bad request, key or model name does not improve with retries
             continue
-        text = out.decode(errors="replace").strip()
+        except (OSError, ValueError) as e:  # connection errors, timeouts, a non-JSON reply
+            last_error = f"{type(e).__name__}: {e}"
+            continue
+        message = ((data.get("choices") or [{}])[0].get("message")) or {}
         try:
-            data = json.loads(text.splitlines()[-1]) if text else {}
+            verdict = json.loads(message.get("content") or "")
         except json.JSONDecodeError:
-            data = {}
-        verdict = data.get("structured_output")
-        if verdict is None and isinstance(data.get("result"), str):
-            try:
-                verdict = json.loads(data["result"])
-            except json.JSONDecodeError:
-                verdict = None
-        if isinstance(verdict, dict) and not data.get("is_error"):
-            return {"verdict": verdict, "cost_usd": float(data.get("total_cost_usd") or 0.0)}
-        last_error = (data.get("result") if isinstance(data.get("result"), str) else "") or err.decode(errors="replace")[-1500:]
-        if classify_error(last_error) == "auth":
-            break
-        await asyncio.sleep(10 * (attempt + 1))
-    raise RuntimeError(f"judge failed: {last_error.strip()[:1500]}")
+            verdict = None
+        if isinstance(verdict, dict) and all(k in verdict for k in schema["required"]):
+            usage = data.get("usage") or {}
+            return {"verdict": verdict, "cost_usd": _cost(usage, reported_cost, cfg), "usage": usage}
+        last_error = f"no usable verdict: {message.get('refusal') or (message.get('content') or '')[:500]!r}"
+    raise RuntimeError(f"judge failed ({cfg.model}): {last_error.strip()[:1500]}")
 
 
 # -- grading one trial ---------------------------------------------------------
@@ -212,7 +244,7 @@ def load_segments(trial_dir: Path) -> list[Segment]:
     return segments
 
 
-async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig, image: str,
+async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig,
                       force: bool = False) -> dict[str, Any] | None:
     out_path = trial_dir / "grade.json"
     if out_path.is_file() and not force:
@@ -228,8 +260,14 @@ async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig, imag
     grade: dict[str, Any] = {
         "task_id": problem.id,
         "trial": result.get("trial"),
-        "judge": {"model": cfg.model, "effort": cfg.effort, "cost_usd": 0.0},
+        "judge": {"model": cfg.model, "effort": cfg.effort, "cost_usd": 0.0, "prompt_tokens": 0,
+                  "completion_tokens": 0},
     }
+
+    def spent(res: dict[str, Any]) -> None:
+        grade["judge"]["cost_usd"] += res["cost_usd"]
+        for k in ("prompt_tokens", "completion_tokens"):
+            grade["judge"][k] += int(res["usage"].get(k) or 0)
 
     # 1) correctness
     if not answer.strip() and not final_message.strip():
@@ -244,9 +282,9 @@ async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig, imag
             answer=answer or "(empty: the agent gave no <answer> tag)",
             final_message=_clip(final_message, cfg.max_final_message_chars),
         )
-        res = await judge(prompt, ANSWER_SCHEMA, cfg, image)
+        res = await judge(prompt, ANSWER_SCHEMA, cfg)
         v = res["verdict"]
-        grade["judge"]["cost_usd"] += res["cost_usd"]
+        spent(res)
         grade.update(correct=bool(v.get("correct")), extracted_answer=str(v.get("extracted_answer", "")),
                      normalized_answer=str(v.get("normalized_answer", "")),
                      answer_rationale=str(v.get("rationale", "")))
@@ -269,9 +307,9 @@ async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig, imag
             network=_network_text(network),
             actions=action_log(segments, cfg.max_action_log_chars),
         )
-        res = await judge(prompt, AUDIT_SCHEMA, cfg, image)
+        res = await judge(prompt, AUDIT_SCHEMA, cfg)
         v = res["verdict"]
-        grade["judge"]["cost_usd"] += res["cost_usd"]
+        spent(res)
         grade.update(cheated=bool(v.get("cheated")), cheat_evidence=str(v.get("evidence", "")),
                      cheat_rationale=str(v.get("rationale", "")))
 

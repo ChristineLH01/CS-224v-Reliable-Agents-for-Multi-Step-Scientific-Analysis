@@ -159,6 +159,14 @@ def _hf_download(repo: str, filename: str, local_dir: Path, token: str | None) -
     )
 
 
+def _dirs(name: str, root: str | Path) -> tuple[Path, Path, Path]:
+    base = dataset_dir(name, root)
+    meta, tasks, dl = base / "meta", base / "tasks", base / "_download"
+    for d in (meta, tasks, dl):
+        d.mkdir(parents=True, exist_ok=True)
+    return meta, tasks, dl
+
+
 def prepare(
     name: str,
     root: str | Path = "data",
@@ -168,13 +176,15 @@ def prepare(
     keep_zips: bool = False,
 ) -> list[str]:
     """Download problems + data for `name` and extract each task. Returns prepared ids."""
-    repo = REPOS[name]
-    base = dataset_dir(name, root)
-    meta, tasks, dl = base / "meta", base / "tasks", base / "_download"
-    for d in (meta, tasks, dl):
-        d.mkdir(parents=True, exist_ok=True)
-    token = token or os.environ.get("HF_TOKEN") or None
+    prepare_meta(name, root, token)
+    return prepare_tasks(name, root, ids, token, force=force, keep_zips=keep_zips)
 
+
+def prepare_meta(name: str, root: str | Path = "data", token: str | None = None) -> None:
+    """problems.csv (questions, rubrics, allowed domains) plus the dataset's README."""
+    repo = REPOS[name]
+    meta, _tasks, dl = _dirs(name, root)
+    token = token or os.environ.get("HF_TOKEN") or None
     for fn in META_FILES:
         try:
             src = _hf_download(repo, fn, dl, token)
@@ -188,6 +198,21 @@ def prepare(
                 ) from e
             print(f"  note: {fn} not downloaded ({e})")
 
+
+def prepare_tasks(
+    name: str,
+    root: str | Path = "data",
+    ids: list[str] | None = None,
+    token: str | None = None,
+    force: bool = False,
+    keep_zips: bool = False,
+) -> list[str]:
+    """Download and extract each task's data (the full set: one zip per task)."""
+    from huggingface_hub.errors import EntryNotFoundError, RemoteEntryNotFoundError  # noqa: PLC0415
+
+    repo = REPOS[name]
+    _meta, tasks, dl = _dirs(name, root)
+    token = token or os.environ.get("HF_TOKEN") or None
     problems = load_problems(name, root)
     wanted = ids or [p.id for p in problems]
     todo = [i for i in wanted if force or not (tasks / i / PREPARED_MARKER).exists()]
@@ -217,7 +242,7 @@ def prepare(
             target.mkdir(parents=True)
             try:
                 archive = _hf_download(repo, f"data/{i}.zip", dl, token)
-            except Exception as e:  # noqa: BLE001 - a problem may ship no data
+            except (EntryNotFoundError, RemoteEntryNotFoundError) as e:  # a problem may ship no data
                 print(f"  warning: no data archive for {i} ({e})")
                 (target / PREPARED_MARKER).touch()
                 continue

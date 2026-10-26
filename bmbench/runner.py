@@ -1,22 +1,26 @@
 """Run every (task, repeat) trial: workspace → sandbox → agent → artifacts → grade.
 
 A trial directory is the unit of resumption: `result.json` with a terminal status
-means done, and re-running the same config skips it. Trials are interleaved
-(repeat 1 of every task, then repeat 2, ...) so an interrupted run stays balanced.
+means done, and re-running the same config skips it. Questions run one after
+another (all repeats of one question, then the next), so each question's data is
+on disk only while its trials need it.
 """
 
 from __future__ import annotations
 
 import asyncio
+import csv
 import datetime as dt
 import hashlib
 import json
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import uuid
+from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -25,12 +29,14 @@ import yaml
 
 from bmbench import __version__
 from bmbench.agents.base import Agent, classify_error, make_agent
-from bmbench.config import RunConfig, resolve, secret_values
+from bmbench.config import RunConfig, apply_overrides, resolve, secret_values
 from bmbench.dataset import (
     PREPARED_MARKER,
     Problem,
     list_input_files,
     load_problems,
+    prepare_meta,
+    prepare_tasks,
     select_problems,
     task_data_dir,
 )
@@ -108,6 +114,33 @@ def clone_tree(src: Path, dst: Path) -> None:
     (dst / PREPARED_MARKER).unlink(missing_ok=True)
 
 
+def rmtree(path: Path) -> None:
+    """Delete a tree, also where the agent took away its own write permission."""
+    shutil.rmtree(path, ignore_errors=True)
+    if path.exists():
+        for dirpath, _dirs, _files in os.walk(path):
+            os.chmod(dirpath, os.stat(dirpath).st_mode | stat.S_IRWXU)
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def remove_workspace(workspace: Path, listing: Path) -> None:
+    """Record every file the trial left behind (path, bytes), then delete them all."""
+    rows = []
+    for dirpath, _dirs, files in os.walk(workspace):
+        for fn in files:
+            path = Path(dirpath) / fn
+            try:
+                size = path.lstat().st_size
+            except OSError:
+                continue
+            rows.append((path.relative_to(workspace).as_posix(), size))
+    with open(listing, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f, delimiter="\t")
+        w.writerow(["path", "bytes"])
+        w.writerows(sorted(rows))
+    rmtree(workspace)
+
+
 def remove_inputs(data_dir: Path, inputs: list[str]) -> None:
     """Delete the cloned input files but keep anything the agent added next to them."""
     for rel in inputs:
@@ -167,13 +200,13 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
     if tdir.exists():
         if run_dir.resolve() not in tdir.resolve().parents:
             raise RuntimeError(f"refusing to delete {tdir}: outside the run directory")
-        shutil.rmtree(tdir)
+        rmtree(tdir)
     tdir.mkdir(parents=True)
 
     sb = cfg.sandbox
     src = task_data_dir(cfg.dataset.name, problem.id, cfg.dataset.root)
     if not (src / PREPARED_MARKER).exists():
-        raise RuntimeError(f"data for {problem.id} not prepared: run `bmbench prepare --dataset {cfg.dataset.name}`")
+        raise RuntimeError(f"data for {problem.id} is missing under {src}")
     inputs = list_input_files(src)
     workspace = tdir / "workspace"
     workspace.mkdir()
@@ -255,7 +288,9 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
         except Exception:  # noqa: BLE001
             pass
         await box.stop()
-        if sb.input_mode == "copy" and not sb.keep_input_data:
+        if not sb.keep_workspace:
+            remove_workspace(workspace, tdir / "workspace_files.tsv")
+        elif sb.input_mode == "copy" and not sb.keep_input_data:
             remove_inputs(workspace / "data", inputs)
 
         answer, final_text = final_answer(segments)
@@ -351,10 +386,74 @@ def _short(text: str | None, n: int = 60) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+def finished(tdir: Path) -> bool:
+    path = tdir / "result.json"
+    return path.is_file() and json.loads(path.read_text(encoding="utf-8")).get("status") in TERMINAL
+
+
+class TaskData:
+    """Each question's input data, on disk only while its trials need it.
+
+    A question's data downloads when its first trial is about to start. The next
+    question's download starts with the current question's last trial, so it
+    overlaps with that trial. With `dataset.delete_after_task`, the data is deleted
+    once every trial of the question has a final status (a trial stopped by a usage
+    limit keeps it, for the resumed run).
+    """
+
+    def __init__(self, cfg: RunConfig, run_dir: Path, pending: dict[str, int]) -> None:
+        self.cfg, self.run_dir = cfg, run_dir
+        self.order = [t for t, n in pending.items() if n]  # questions with trials to run
+        self.pending = dict(pending)
+        self.started: Counter[str] = Counter()
+        self.left = dict(pending)
+        self.fetches: dict[str, asyncio.Task[None]] = {}
+        self.lock = asyncio.Lock()  # one download at a time
+
+    def _dir(self, task_id: str) -> Path:
+        return task_data_dir(self.cfg.dataset.name, task_id, self.cfg.dataset.root)
+
+    def _fetch(self, task_id: str) -> asyncio.Task[None]:
+        if task_id not in self.fetches:
+            task = asyncio.create_task(self._download(task_id))
+            # a prefetch nobody waits for (the run stopped) must not warn at exit
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            self.fetches[task_id] = task
+        return self.fetches[task_id]
+
+    async def _download(self, task_id: str) -> None:
+        if (self._dir(task_id) / PREPARED_MARKER).exists():
+            return
+        async with self.lock:
+            print(f"  downloading data for {task_id}")
+            await asyncio.to_thread(prepare_tasks, self.cfg.dataset.name, self.cfg.dataset.root, [task_id])
+
+    async def acquire(self, task_id: str) -> None:
+        """Wait until the question's data is on disk."""
+        self.started[task_id] += 1
+        fetch = self._fetch(task_id)
+        if self.started[task_id] == self.pending[task_id]:
+            i = self.order.index(task_id)
+            if i + 1 < len(self.order):
+                self._fetch(self.order[i + 1])
+        await asyncio.shield(fetch)
+
+    def release(self, task_id: str) -> None:
+        self.left[task_id] -= 1
+        if self.left[task_id] or not self.cfg.dataset.delete_after_task:
+            return
+        if all(finished(trial_dir(self.run_dir, task_id, k)) for k in range(1, self.cfg.n_trials + 1)):
+            rmtree(self._dir(task_id))
+            print(f"  deleted data for {task_id}")
+
+
 async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None) -> Path:
-    problems = select_problems(
-        load_problems(cfg.dataset.name, cfg.dataset.root), cfg.dataset.task_ids, cfg.dataset.human_solvable
-    )
+    try:
+        all_problems = load_problems(cfg.dataset.name, cfg.dataset.root)
+    except FileNotFoundError:
+        prepare_meta(cfg.dataset.name, cfg.dataset.root)
+        all_problems = load_problems(cfg.dataset.name, cfg.dataset.root)
+    problems = select_problems(all_problems, cfg.dataset.task_ids, cfg.dataset.human_solvable)
     if not problems:
         raise RuntimeError("no tasks selected")
     agent = make_agent(cfg.agent)
@@ -362,12 +461,17 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
     await write_manifest(cfg, agent, run_dir)
     grade = cfg.grader.auto if grade is None else grade
 
-    jobs = [(p, k) for k in range(1, cfg.n_trials + 1) for p in problems]
+    # every trial of one question, then the next question
+    jobs = [(p, k) for p in problems for k in range(1, cfg.n_trials + 1)]
+    todo = {(p.id, k) for p, k in jobs if force or not finished(trial_dir(run_dir, p.id, k))}
+    data = TaskData(cfg, run_dir, {p.id: sum(1 for k in range(1, cfg.n_trials + 1) if (p.id, k) in todo)
+                                   for p in problems})
     total = len(jobs)
     sem = asyncio.Semaphore(max(1, cfg.concurrency))
     abort: list[str] = []
     done = 0
-    print(f"run {cfg.run_name}: {len(problems)} tasks × {cfg.n_trials} trials = {total} → {run_dir}")
+    print(f"run {cfg.run_name}: {len(problems)} tasks × {cfg.n_trials} trials = {total} "
+          f"({total - len(todo)} already done) → {run_dir}")
 
     async def one(problem: Problem, k: int) -> dict[str, Any] | None:
         nonlocal done
@@ -375,14 +479,25 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
             if abort:
                 return None
             tdir = trial_dir(run_dir, problem.id, k)
-            result = await run_trial(cfg, agent, problem, k, run_dir, force=force)
+            needs_data = (problem.id, k) in todo
+            if needs_data:
+                try:
+                    await data.acquire(problem.id)
+                except Exception as e:  # noqa: BLE001
+                    abort.append(f"data download failed for {problem.id}: {_short(str(e), 300)}")
+                    return None
+            try:
+                result = await run_trial(cfg, agent, problem, k, run_dir, force=force)
+            finally:
+                if needs_data:
+                    data.release(problem.id)
             done += 1
             idx = done  # `done` moves on while this trial is being graded
             skipped = result.pop("_skipped", False)
             g = None
             if grade and result.get("status") in TERMINAL:
                 try:
-                    g = await grade_trial(tdir, problem, cfg.grader, cfg.sandbox.image)
+                    g = await grade_trial(tdir, problem, cfg.grader)
                 except Exception as e:  # noqa: BLE001 - grading can be redone with `bmbench grade`
                     print(f"    grading failed for {problem.id} r{k}: {e}")
             mark = "" if g is None else (" ✓" if g.get("score") else " ✗") + (" [cheated]" if g.get("cheated") else "")
@@ -402,14 +517,15 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
     write_report(run_dir)
     if abort:
         raise RunAborted(
-            abort[0] + "\nStopped early. Fix the cause (auth token / usage limit) and re-run the same command to resume."
+            abort[0] + "\nStopped early. Fix the cause (auth token, usage limit, download) "
+            "and re-run the same command to resume."
         )
     return run_dir
 
 
 async def grade_run(run_dir: Path, *, force: bool = False, tasks: list[str] | None = None,
-                    concurrency: int = 2) -> None:
-    cfg = load_run_config(run_dir)
+                    concurrency: int = 2, overrides: list[str] | None = None) -> None:
+    cfg = load_run_config(run_dir, overrides)
     problems = {p.id: p for p in load_problems(cfg.dataset.name, cfg.dataset.root)}
     sem = asyncio.Semaphore(concurrency)
     trial_dirs = sorted((run_dir / "trials").glob("*/r*"))
@@ -420,7 +536,7 @@ async def grade_run(run_dir: Path, *, force: bool = False, tasks: list[str] | No
             return
         async with sem:
             try:
-                g = await grade_trial(tdir, problems[task_id], cfg.grader, cfg.sandbox.image, force=force)
+                g = await grade_trial(tdir, problems[task_id], cfg.grader, force=force)
                 if g is not None:
                     print(f"{task_id} {tdir.name}: score={g['score']} correct={g['correct']} cheated={g['cheated']}")
             except Exception as e:  # noqa: BLE001
@@ -429,8 +545,8 @@ async def grade_run(run_dir: Path, *, force: bool = False, tasks: list[str] | No
     await asyncio.gather(*(one(t) for t in trial_dirs))
 
 
-def load_run_config(run_dir: Path) -> RunConfig:
+def load_run_config(run_dir: Path, overrides: list[str] | None = None) -> RunConfig:
     from bmbench.config import _build  # noqa: PLC0415
 
     data = yaml.safe_load((run_dir / "config.yaml").read_text(encoding="utf-8"))
-    return _build(RunConfig, data, "")
+    return _build(RunConfig, apply_overrides(data, overrides or []), "")

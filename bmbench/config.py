@@ -19,14 +19,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: Auth variables forwarded (by name, never by value on a command line) into the sandbox.
 SECRET_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
+#: The judge's OpenAI-compatible endpoint (a LiteLLM proxy). Read on the host only:
+#: never forwarded into a sandbox.
+JUDGE_URL_ENV, JUDGE_KEY_ENV = "LITELLM_BASE_URL", "LITELLM_API_KEY"
 
 
 @dataclass
 class DatasetConfig:
     name: str = "preview"  # preview | full
     root: str = "data"  # data/<name>/{meta,tasks}
-    task_ids: list[str] | None = None  # None = every prepared task
+    task_ids: list[str] | None = None  # None = every problem in problems.csv
     human_solvable: str | None = None  # "yes" | "no" | None (both)
+    # A question's data is downloaded when its first trial starts and, with this on,
+    # deleted again once all its trials have finished.
+    delete_after_task: bool = True
 
 
 @dataclass
@@ -62,7 +68,7 @@ class SandboxConfig:
     platform: str | None = None  # e.g. linux/amd64; None = native
     cpus: float = 4
     memory: str = "3.5g"
-    timeout_s: int = 1800  # wall clock for the main agent call
+    timeout_s: int = 3600  # wall clock for the main agent call
     network: str = "allowlist"  # allowlist | open
     # Hosts the agent itself needs on top of the problem's allowed_domains.
     infra_domains: list[str] = field(
@@ -74,15 +80,22 @@ class SandboxConfig:
     # copy: clone the task data into each trial's workspace (copy-on-write where the
     # filesystem allows). readonly: bind-mount the prepared data read-only instead.
     input_mode: str = "copy"
-    keep_input_data: bool = False  # keep the cloned inputs after the trial
+    # The workspace (inputs, downloads, intermediate files) is deleted after each
+    # trial; workspace_files.tsv keeps the list of files. The trajectory already
+    # holds every command and every output the agent saw.
+    keep_workspace: bool = False
+    keep_input_data: bool = False  # with keep_workspace: keep the cloned inputs too
 
 
 @dataclass
 class GraderConfig:
     auto: bool = True  # grade each trial as soon as it finishes
-    model: str = "claude-opus-5-5"
-    effort: str | None = "medium"
-    timeout_s: int = 900
+    model: str = "gpt-6-sol"  # served by the LiteLLM proxy in LITELLM_BASE_URL
+    effort: str | None = "medium"  # sent as reasoning_effort; None = the model's default
+    # (input, output) USD per million tokens, for the cost estimate when the proxy
+    # does not report one
+    usd_per_mtok: list[float] = field(default_factory=lambda: [2.0, 10.0])
+    timeout_s: int = 600
     max_action_log_chars: int = 150_000
     max_final_message_chars: int = 6_000
 
@@ -179,5 +192,5 @@ def load_dotenv(path: str | Path | None = None) -> None:
 
 def secret_values() -> list[str]:
     """Values to scrub from anything the harness saves."""
-    names = (*SECRET_ENV, "HF_TOKEN")
+    names = (*SECRET_ENV, JUDGE_KEY_ENV, "HF_TOKEN")
     return [v for n in names if (v := os.environ.get(n)) and len(v) >= 8]

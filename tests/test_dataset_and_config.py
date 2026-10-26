@@ -70,7 +70,7 @@ def test_prompt_never_contains_the_rubric():
     assert "SECRET-ANSWER" not in text and "rubric" not in text.lower()
     assert p.question in text and "/workspace/data" in text and "3 files" in text
     assert "<answer>your answer</answer>" in text  # neutral format example, never a real answer
-    assert "ncbi.nlm.nih.gov, pypi.org" in text and "30 minutes" in text and "3.5 GB" in text
+    assert "ncbi.nlm.nih.gov, pypi.org" in text and "60 minutes" in text and "3.5 GB" in text
     assert "{" not in text  # every placeholder filled
     assert "answer_rubric" not in p.public()
 

@@ -68,6 +68,7 @@ def cmd_build(a: argparse.Namespace) -> None:
 
 
 async def _doctor(a: argparse.Namespace) -> int:
+    from bmbench.grader import ANSWER_SCHEMA, judge, judge_endpoint  # noqa: PLC0415
     from bmbench.sandbox import DockerSandbox, docker_ok, image_info, run_cmd  # noqa: PLC0415
 
     cfg = load_config(a.config, a.set)
@@ -93,9 +94,28 @@ async def _doctor(a: argparse.Namespace) -> int:
         problems = load_problems(cfg.dataset.name, cfg.dataset.root)
         base = dataset_dir(cfg.dataset.name, cfg.dataset.root) / "tasks"
         ready = [p.id for p in problems if (base / p.id / PREPARED_MARKER).exists()]
-        report(bool(ready), f"dataset {cfg.dataset.name}", f"{len(ready)}/{len(problems)} tasks prepared")
-    except FileNotFoundError as e:
-        report(False, f"dataset {cfg.dataset.name}", str(e))
+        rest = "" if len(ready) == len(problems) else " (the rest downloads during the run, one question at a time)"
+        report(True, f"dataset {cfg.dataset.name}", f"{len(problems)} problems; data on disk for {len(ready)}{rest}")
+    except FileNotFoundError:
+        report(True, f"dataset {cfg.dataset.name}", "not downloaded yet; `run` fetches it")
+    if cfg.dataset.name == "full":
+        report(bool(os.environ.get("HF_TOKEN")), "HF_TOKEN for the gated full set", "" if os.environ.get("HF_TOKEN") else "missing")
+    try:
+        url, _key = judge_endpoint()
+        report(True, f"judge endpoint ({cfg.grader.model})", url)
+    except RuntimeError as e:
+        report(False, "judge endpoint", str(e))
+    else:
+        if a.auth_check:
+            prompt = ("Grading test. Expected answer: CTCF. Submitted answer: ctcf. Decide whether the "
+                      "submission is correct; keep the rationale to one sentence.")
+            try:
+                res = await judge(prompt, ANSWER_SCHEMA, cfg.grader, retries=0)
+                v = res["verdict"]
+                report(v.get("correct") is True, f"judge {cfg.grader.model} answers in the schema",
+                       f"correct={v.get('correct')}, ${res['cost_usd']:.4f}")
+            except RuntimeError as e:
+                report(False, f"judge {cfg.grader.model}", str(e)[:400])
 
     if cfg.sandbox.network == "allowlist":
         with tempfile.TemporaryDirectory(prefix="bmb-doctor-") as tmp:
@@ -179,7 +199,8 @@ def cmd_grade(a: argparse.Namespace) -> None:
     from bmbench.runner import grade_run  # noqa: PLC0415
 
     run_dir = resolve(a.run)
-    asyncio.run(grade_run(run_dir, force=a.regrade, tasks=_ids(a.tasks), concurrency=a.concurrency))
+    asyncio.run(grade_run(run_dir, force=a.regrade, tasks=_ids(a.tasks), concurrency=a.concurrency,
+                          overrides=a.set))
     write_report(run_dir)
     print(f"report: {run_dir / 'report.md'}")
 
@@ -250,10 +271,11 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--only", choices=["sandbox", "proxy"])
     sp.set_defaults(fn=cmd_build)
 
-    sp = sub.add_parser("doctor", help="check docker, images, auth, data and the network allowlist")
+    sp = sub.add_parser("doctor", help="check docker, images, auth, judge, data and the network allowlist")
     with_config(sp)
     sp.add_argument("--auth-check", action="store_true",
-                    help="also send one tiny prompt through the sandbox to verify auth (costs a few tokens)")
+                    help="also send one tiny prompt to the agent (through the sandbox) and to the judge "
+                         "(costs a few tokens)")
     sp.set_defaults(fn=cmd_doctor)
 
     sp = sub.add_parser("run", help="run trials (resumable)")
@@ -271,6 +293,8 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("--regrade", action="store_true")
     sp.add_argument("--tasks")
     sp.add_argument("--concurrency", type=int, default=2)
+    sp.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                    help="override the run's saved config, e.g. --set grader.model=gpt-6-sol")
     sp.set_defaults(fn=cmd_grade)
 
     sp = sub.add_parser("report", help="recompute metrics and print the report")
