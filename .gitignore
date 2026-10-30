@@ -1,0 +1,14 @@
+__pycache__/
+baseline/source/
+baseline/extracted/
+baseline/runs/
+baseline/comparison/inputs/
+baseline/comparison/
+baseline/results.csv
+baseline/results.md
+baseline/dataset_version.json
+.DS_Store
+.env
+.env.*
+!.env.example
+.venv/
