@@ -1,0 +1,33 @@
+# Local debugging config; not a network-restricted Docker experiment.
+benchmark: biomysterybench
+split: preview
+method: sheldon
+# Native tools via Responses; only transport changes, not the method.
+engine: toolloop
+provider: openai-responses
+model: gpt-5.6-terra
+effort: high
+max_tokens: 16000
+thinking: true
+limit: 5
+seed: 0
+max_rounds: 3
+max_calls: 40
+max_usd: 2.0
+max_seconds: 1800
+concurrency: 1
+cache: false
+resume: true
+tag: bmb-pilot
+params:
+  # Included in run identity; records the communication-layer revision.
+  transport_revision: responses-stream-strict-submit-v2
+  mode: staged
+  rounds: 3
+  n_initial: 3
+  select_k: 2
+  probes:
+    - run_shell:
+        timeout: 120
+  benchmark_opts:
+    isolate: false

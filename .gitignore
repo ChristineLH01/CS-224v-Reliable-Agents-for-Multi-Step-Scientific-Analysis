@@ -12,3 +12,4 @@ baseline/dataset_version.json
 .env.*
 !.env.example
 .venv/
+.vscode/

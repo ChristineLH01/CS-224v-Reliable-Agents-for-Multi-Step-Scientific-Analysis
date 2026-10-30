@@ -1,8 +1,103 @@
 # SHELDON runtime
 
-Local Codex CLI runner for the five official BioMysteryBench preview tasks.
-This is a preliminary local baseline, not the isolated Docker evaluation used
-in the Claude Code experiment.
+BioMysteryBench experiments with a Codex CLI baseline and an adapted copy of
+[Stanford SHELDON](https://github.com/stanford-oval/sheldon). This repository
+contains the implementation, configuration, tests and progress documentation;
+datasets, credentials and experiment outputs are kept local.
+
+## SHELDON: additions and compatibility improvements
+
+`upstream-sheldon/` contains the upstream source plus our local adaptations,
+based on upstream commit `7fbf027d1fb414443612d4ad2661b396c8352cd3`.
+The original MIT license and attribution are retained in that directory.
+It is included as ordinary source files so cloning this repository also gets
+our modifications; it is not a Git submodule.
+
+| Change | Purpose |
+|---|---|
+| BioMysteryBench adapter | Load the five preview questions and seed each task workspace with its biological data |
+| Opt-in `openai-responses` provider | Support native tools and explicit reasoning effort on the Stanford model proxy |
+| Responses history preservation | Replay full response items, including encrypted reasoning, with tool results |
+| Streaming and strict structured output | Address observed proxy response-size and output-format issues; validate results with upstream Pydantic models |
+| Required submission handling | Supply the `submit_*` tool explicitly requested by a schema-backed closing prompt, even after search budget exhaustion |
+| Local environment context | Tell the solver the Python path, available input filenames and macOS command constraints |
+| Diagnostic runner | Print compact progress, enforce a process-group deadline and report task errors even when the upstream CLI exits 0 |
+| Regression checks | Test data access, answer isolation, response translation, structured submissions and timeouts |
+
+**Scope:** SHELDON's hypothesis/observation search algorithm, stage prompt
+templates and engine implementations are unchanged. The model communication
+layer and benchmark interface are modified. These are integration and
+reliability changes, not evidence of improved scientific accuracy. Do not
+describe this as an entirely unmodified copy of SHELDON.
+
+An automatic judge was explored during development and has been removed.
+The current pipeline saves answers and traces without post-answer judge calls.
+The upstream framework still requires a score hook; its `not_evaluated` zero
+is a compatibility placeholder, not an accuracy result.
+
+## Run SHELDON on BioMysteryBench
+
+```bash
+conda create -n sheldon-runtime -c conda-forge python=3.11 pip -y
+conda activate sheldon-runtime
+pip install -r requirements.txt
+conda install -c conda-forge -c bioconda biopython samtools bedtools blast -y
+
+# Download the official preview and prepare local inputs.
+python baseline/prepare.py
+
+cd upstream-sheldon
+pip install -e .
+cp .env.example .env
+```
+
+Edit `.env` locally with your own credentials. For the Stanford proxy, set
+`OPENAI_BASE_URL=https://models.genie.stanford.edu/v1` and your
+`OPENAI_API_KEY`. Never commit or share the populated file. Model aliases and
+access depend on your endpoint/account; the checked configuration uses
+`gpt-5.6-terra`.
+
+```bash
+python scripts/prepare_biomysterybench.py
+python -m unittest discover -s tests -v
+sheldon smoke
+
+# One-question diagnostic: separate short budget and 10-minute hard deadline.
+python scripts/run_biomysterybench_pilot.py
+
+# Five questions, one attempt per question; no automatic judge.
+sheldon run \
+  -c configs/experiments/biomysterybench_preview.yaml \
+  --model gpt-5.6-terra \
+  --tag terra-preview-trial1 \
+  --echo
+```
+
+The preview config allows up to 3 rounds, 40 search model calls, 30 minutes and
+$2 estimated solver cost per task, with one task in flight. These are harness
+budgets rather than hard billing/process limits; a required closing call can
+exceed the search-call budget. The diagnostic wrapper additionally enforces a
+600-second local process deadline. See [adapter instructions](upstream-sheldon/BIOMYSTERYBENCH.md).
+
+Answers, errors, usage and timing are in `runs/<run-id>/predictions.jsonl`;
+traces are under `runs/<run-id>/traces/`. Use a fresh tag for an independent
+trial. Reusing a tag can resume an existing run. Inspect each prediction's
+`error` and `answer`; process exit status alone is not sufficient.
+
+**Validation:** one full hb020 diagnostic completed in about 107 seconds with
+a nonempty answer. This is not a five-question result or a guarantee of
+repeated-run stability. Network restrictions are currently prompt instructions;
+local filesystem access is not isolated by default. Formal comparisons with
+the Claude Code Docker experiment need aligned environments and enforced
+network rules.
+
+Development history and known limitations: [progress report](docs/progress-report.md)
+and [compatibility diagnosis](docs/sheldon-compatibility-diagnosis.md).
+
+## Codex CLI baseline
+
+The baseline is a preliminary local run, separate from the isolated Docker
+evaluation used in the Claude Code experiment.
 
 ## Environment
 

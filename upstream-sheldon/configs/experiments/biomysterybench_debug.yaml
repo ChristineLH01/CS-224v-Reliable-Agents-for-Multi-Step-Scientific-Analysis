@@ -1,0 +1,15 @@
+# Short diagnostic only, not the settings for reporting benchmark performance.
+extends: biomysterybench_preview.yaml
+max_tokens: 4096
+max_rounds: 1
+max_calls: 15
+max_usd: 0.50
+max_seconds: 300
+resume: false
+tag: bmb-debug
+params:
+  rounds: 1
+  candidate_analysis_concurrent: false
+  probes:
+    - run_shell:
+        timeout: 30
