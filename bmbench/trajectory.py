@@ -28,12 +28,15 @@ class Step:
 
 @dataclass
 class Segment:
-    """One invocation of the agent: the main run, a nudge, or the finalize turn."""
+    """One invocation of the agent: the main run, a nudge, a resume after an
+    out-of-memory kill, or the finalize turn."""
 
-    kind: str  # main | nudge<k> | finalize
+    kind: str  # main | nudge<k> | oom_resume<k> | finalize
     exit_code: int = 0
     timed_out: bool = False
     seconds: float = 0.0
+    oom_kills: int = 0  # processes the kernel killed for memory meanwhile (the agent's commands, mostly)
+    oom_killed: bool = False  # the agent process itself was one of them
     session_id: str | None = None
     result_subtype: str | None = None
     is_error: bool | None = None

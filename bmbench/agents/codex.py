@@ -22,7 +22,8 @@ from bmbench.agents.base import Agent
 from bmbench.config import LITELLM_KEY_ENV, LITELLM_URL_ENV
 from bmbench.trajectory import Segment, Step
 
-#: exit status of coreutils `timeout` when the limit fired (137 if it had to SIGKILL)
+#: exit status of coreutils `timeout` when the limit fired (137 if it had to SIGKILL; an
+#: out-of-memory kill also ends in 137, and the runner tells the two apart)
 TIMEOUT_EXIT_CODES = (124, 137)
 PROVIDER = "bmbench_litellm"
 

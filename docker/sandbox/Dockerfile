@@ -71,6 +71,20 @@ ENV CONDA_DEFAULT_ENV=bio \
 
 RUN echo 'export PATH="/home/agent/.local/bin:/opt/conda/envs/bio/bin:/opt/conda/bin:$PATH"' >> /home/agent/.bashrc
 
+# When an attempt runs out of memory, the kernel must kill the agent's command, not
+# the agent CLI (its session would end with it). Every bash the agent starts, login
+# (`bash -lc`) or not (`bash -c`, via BASH_ENV), puts itself first in line for the
+# OOM killer, which needs no privileges; its children inherit that. The CLI, started
+# without a shell, keeps the default score. Claude Code drops BASH_ENV from its
+# shells, so it runs each command through `oom-first` (CLAUDE_CODE_SHELL_PREFIX).
+USER root
+RUN echo '{ echo 1000 > /proc/self/oom_score_adj; } 2>/dev/null' > /etc/profile.d/00-oom-first.sh \
+ && mkdir -p /usr/local/libexec/bmbench \
+ && printf '#!/bin/bash\n. /etc/profile.d/00-oom-first.sh\nexec /bin/bash -c "$1"\n' > /usr/local/libexec/bmbench/oom-first \
+ && chmod 755 /usr/local/libexec/bmbench/oom-first
+USER agent
+ENV BASH_ENV=/etc/profile.d/00-oom-first.sh
+
 LABEL org.bmbench.role=sandbox
 WORKDIR /workspace
 # The base image's ENTRYPOINT is tini, so PID 1 reaps orphans; the harness runs

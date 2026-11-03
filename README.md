@@ -27,7 +27,7 @@ one independent run of the agent on a problem, in a fresh sandbox.
 | Agents | Each runs headless and unchanged, with its own tools, context management and subagents, and web search off. **Claude Code:** `claude-opus-5-5`, effort `high`, on a Claude subscription. **Codex:** `gpt-6.1-sol`, effort `high`, through the LiteLLM proxy. |
 | Sandbox | A fresh Docker container per attempt, with standard bioinformatics tools (samtools, BLAST+, HOMER, DESeq2, scanpy, …). The agent can install more with conda or pip. Only the problem's data is mounted; the answer key never is. |
 | Network | Through a proxy that only allows the problem's listed sites (NCBI, Ensembl, UCSC, conda, PyPI, …) and the model API. |
-| Limits | 1 hour, 4 CPUs and 3.5 GB RAM per attempt, for the preview and the full set alike. After a timeout, the agent gets one turn to give its best answer. |
+| Limits | 1 hour, 4 CPUs and 3.5 GB RAM per attempt, for the preview and the full set alike. After a timeout, the agent gets one turn to give its best answer. A command that runs out of memory is killed, not the agent, which sees the error and carries on. If the agent itself is killed, it is resumed with the time it has left; killed a second time, it gets one turn to give its best answer. |
 | Attempts | 3 per problem, and 2 attempts run at a time (`concurrency: 2`). Attempts run problem by problem: each problem's data is downloaded before its first attempt and deleted after its last. |
 | Grading | One judge for every agent: Opus 5.5, run as `claude -p` on the Claude subscription. It checks (1) the answer against the answer key and (2) the trajectory for cheating, i.e. looking up the source dataset (GEO/SRA accessions, the original paper). An attempt scores 1 only if it is correct and did not cheat. |
 
@@ -44,7 +44,7 @@ Each problem weighs the same. With *n* attempts per problem (default 3):
 | | **correct-attempts histogram** | how many problems were solved 3/3, 2/3, 1/3, 0/3 |
 | Cost | **mean cost, mean time** | per attempt; cost is an API-price estimate |
 
-The report also lists the attempts that timed out or were flagged for cheating. All metrics are
+The report also lists the attempts that timed out, ran out of memory, or were flagged for cheating. All metrics are
 given overall and split into human-solvable and human-hard problems.
 
 ## Usage
@@ -125,7 +125,7 @@ bmbench/            the harness
   grader.py           the judge: answer check and cheating audit
   metrics.py, report.py
 configs/            run settings per agent, for the preview and the full set
-prompts/            problem prompt, timeout/nudge messages, judge prompts
+prompts/            problem prompt, timeout/nudge/out-of-memory messages, judge prompts
 docker/             sandbox image (tools, Claude Code, Codex) and proxy image
 tests/              unit tests (uv run --group dev pytest)
 data/, runs/        downloaded benchmark and run outputs (not in git)

@@ -65,6 +65,9 @@ def test_error_classification_and_status():
     assert classify([ok], "GENEA")[0] == "completed"
     assert classify([ok], None)[0] == "no_answer"
     assert classify([Segment(kind="main", timed_out=True)], None)[0] == "timeout"
+    # a final-answer turn that times out does not change why the work stopped
+    killed = Segment(kind="oom_resume1", oom_killed=True)
+    assert classify([killed, Segment(kind="finalize", timed_out=True)], None)[0] == "out_of_memory"
     assert classify([Segment(kind="main", error_text="Invalid API key")], None)[0] == "auth_error"
     assert classify([Segment(kind="main", exit_code=1)], None)[0] == "agent_error"
 

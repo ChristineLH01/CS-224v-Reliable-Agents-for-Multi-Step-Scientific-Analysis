@@ -45,7 +45,7 @@ from bmbench.sandbox import DATA_DIR, WORKDIR, DockerSandbox, image_info, run_cm
 from bmbench.trajectory import Segment, final_answer, render_transcript, tool_counts
 
 #: statuses that count as a finished attempt (re-runs skip them)
-TERMINAL = {"completed", "no_answer", "timeout", "agent_error"}
+TERMINAL = {"completed", "no_answer", "timeout", "out_of_memory", "agent_error"}
 #: statuses that stop the whole run: nothing after them can succeed
 FATAL = {"auth_error", "rate_limited"}
 
@@ -223,6 +223,18 @@ def scrub_secrets(root: Path, secrets: list[str], max_bytes: int = 50 * 1024 * 1
                 path.write_bytes(new)
 
 
+def stopped_by(segments: list[Segment]) -> str:
+    """What cut the agent's work short: "timeout" (the time limit), "out_of_memory" (the
+    kernel killed the agent itself once more than it is resumed for), or "" (neither).
+    The final-answer turn that follows either does not change it."""
+    worked = [s for s in segments if s.kind != "finalize"]
+    if worked and worked[-1].timed_out:
+        return "timeout"
+    if worked and worked[-1].oom_killed:
+        return "out_of_memory"
+    return ""
+
+
 def classify(segments: list[Segment], answer: str | None) -> tuple[str, str]:
     """(status, error kind) for a finished attempt."""
     errors = "\n".join(s.error_text for s in segments if s.error_text)
@@ -233,8 +245,8 @@ def classify(segments: list[Segment], answer: str | None) -> tuple[str, str]:
         return "auth_error", kind
     if kind == "rate_limit":
         return "rate_limited", kind
-    if any(s.timed_out for s in segments):
-        return "timeout", kind
+    if stopped := stopped_by(segments):
+        return stopped, kind
     if not any(s.got_result for s in segments) or any(s.is_error for s in segments):
         return "agent_error", kind
     return "no_answer", kind
@@ -280,6 +292,7 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
     segments: list[Segment] = []
     finalized = False
     nudges = 0
+    oom_resumes = 0
     harness_error = ""
 
     box = DockerSandbox(
@@ -295,10 +308,17 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
             budget = max(0.0, agent.cfg.max_budget_usd - spent)
         argv = agent.command(timeout_s=int(timeout_s), session_id=session_id, resume=resume, budget_usd=budget)
         out, err = adir / f"stream.{kind}.jsonl", adir / f"stderr.{kind}.log"
+        oom_before = await box.oom_kills()
         res = await box.exec(argv, stdin_path=stdin, stdout_path=out, stderr_path=err,
                              deadline_s=timeout_s + 120, env=agent.env(), secret_env=agent.secret_env)
         seg = Segment(kind=kind, exit_code=res.code, timed_out=res.timed_out, seconds=res.seconds)
         seg = agent.parse(out, err, seg)
+        seg.oom_kills = max(0, await box.oom_kills() - oom_before)
+        if res.code == 137 and res.seconds < timeout_s:
+            # SIGKILLed before the time limit, so not by `timeout` (its kill comes 30 s
+            # after the limit): by the kernel, if the container ran out of memory meanwhile
+            seg.timed_out = False
+            seg.oom_killed = seg.oom_kills > 0
         segments.append(seg)
         return seg
 
@@ -307,17 +327,26 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
         seg = await invoke("main", prompt_path, sb.timeout_s, resume=False)
         while True:
             answer, _ = final_answer(segments)
-            if answer or classify_error(seg.error_text) in ("auth", "rate_limit"):
-                break
-            if seg.timed_out:
-                if agent.cfg.finalize_on_timeout and not finalized:
-                    await box.kill_agent_processes()
-                    finalized = True
-                    seg = await invoke("finalize", resolve("prompts/finalize.md"), agent.cfg.finalize_timeout_s,
-                                       resume=True)
-                    continue
+            if answer or finalized or classify_error(seg.error_text) in ("auth", "rate_limit"):
                 break
             remaining = sb.timeout_s - sum(s.seconds for s in segments if s.kind != "finalize")
+            if seg.oom_killed and oom_resumes < agent.cfg.max_oom_resumes:
+                await box.kill_agent_processes()  # what it left running still holds memory
+                oom_resumes += 1
+                # with the time it has left: a resume that then runs out of it is a timeout
+                seg = await invoke(f"oom_resume{oom_resumes}", resolve("prompts/out_of_memory.md"),
+                                   remaining, resume=True)
+                continue
+            if seg.oom_killed or (seg.timed_out and agent.cfg.finalize_on_timeout):
+                # out of memory again, or out of time: one turn to give its best answer
+                await box.kill_agent_processes()
+                finalized = True
+                prompt = "out_of_memory_final.md" if seg.oom_killed else "finalize.md"
+                seg = await invoke("finalize", resolve(f"prompts/{prompt}"), agent.cfg.finalize_timeout_s,
+                                   resume=True)
+                continue
+            if seg.timed_out:
+                break
             if seg.got_result and not seg.is_error and nudges < agent.cfg.max_nudges and remaining > 60:
                 nudges += 1
                 seg = await invoke(f"nudge{nudges}", resolve("prompts/nudge.md"), remaining, resume=True)
@@ -345,6 +374,7 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
 
         answer, final_text = final_answer(segments)
         status, err_kind = classify(segments, answer)
+        stopped = stopped_by(segments)
         if harness_error:
             status = "harness_error"
         usage_tokens = agent.session_usage(adir / "agent_session") or _sum_usage(segments)
@@ -376,8 +406,11 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
             "agent_seconds": round(sum(s.seconds for s in segments), 1),
             "wall_seconds": round(loop.time() - t0, 1),
             "tokens": usage_tokens,
-            "timed_out": any(s.timed_out for s in segments),
-            "finalized_after_timeout": finalized,
+            "timed_out": stopped == "timeout",
+            "out_of_memory": stopped == "out_of_memory",
+            "finalized_after_timeout": finalized and stopped == "timeout",
+            "oom_kills": sum(s.oom_kills for s in segments),
+            "agent_oom_kills": sum(1 for s in segments if s.oom_killed),
             "nudges": nudges,
             "tool_counts": tool_counts(recorded),
             "rate_limit": next((s.rate_limit for s in reversed(segments) if s.rate_limit), {}),
@@ -564,7 +597,8 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
             tag = "skip (done)" if skipped else result["status"]
             window = ((result.get("rate_limit") or {}).get("unifiedWindows") or {}).get("five_hour") or {}
             used = f", 5h-window {100 * window['utilization']:.0f}% used" if window.get("utilization") is not None else ""
-            print(f"[{idx}/{total}] {problem.id} attempt {k}: {tag}, {result.get('agent_seconds', 0) / 60:.1f} min, "
+            cut = ", timed out" if result.get("timed_out") else ", out of memory" if result.get("out_of_memory") else ""
+            print(f"[{idx}/{total}] {problem.id} attempt {k}: {tag}{'' if skipped else cut},{result.get('agent_seconds', 0) / 60:.1f} min, "
                   f"${result.get('cost_usd', 0):.2f}{used}, answer={_short(result.get('answer'))!r}{mark}"
                   + (f"  ({result['harness_error']})" if result.get("harness_error") else ""))
             if result["status"] in FATAL:

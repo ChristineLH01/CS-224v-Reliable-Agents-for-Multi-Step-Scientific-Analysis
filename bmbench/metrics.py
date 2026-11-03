@@ -63,6 +63,7 @@ def per_problem(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "scores": scores,
             "answer_agreement": counts.most_common(1)[0][1] / n,
             "timed_out": sum(1 for r in rs if r.get("timed_out")),
+            "out_of_memory": sum(1 for r in rs if r.get("out_of_memory")),
             "cheated": sum(1 for r in rs if r.get("cheated")),
             "mean_cost_usd": _mean([r.get("cost_usd") for r in rs]),
             "mean_minutes": _mean([(r.get("agent_seconds") or 0) / 60 for r in rs]),
@@ -94,6 +95,7 @@ def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
         "minutes_mean": _mean([(r.get("agent_seconds") or 0) / 60 for r in records]),
         # context, not metrics: counts of attempts
         "timed_out": sum(t["timed_out"] for t in problems),
+        "out_of_memory": sum(t["out_of_memory"] for t in problems),
         "cheated": sum(t["cheated"] for t in problems),
     }
 

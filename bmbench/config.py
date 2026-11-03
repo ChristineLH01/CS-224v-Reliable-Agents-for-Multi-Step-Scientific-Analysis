@@ -52,9 +52,13 @@ class AgentConfig:
     env: dict[str, str] = field(default_factory=dict)  # on top of the adapter's own defaults
     # After a wall-clock timeout: one resumed turn asking for the best answer so far.
     finalize_on_timeout: bool = True
-    finalize_timeout_s: int = 180
+    finalize_timeout_s: int = 180  # that turn's limit, also after running out of memory
     # When a run ends with no <answer> tag: resumed turns asking it to finish.
     max_nudges: int = 1
+    # When the kernel kills the agent process itself for memory: resumed turns that carry
+    # on within the same time limit. Killed once more, the attempt ends out of memory,
+    # with one turn to give its best answer.
+    max_oom_resumes: int = 1
 
 
 @dataclass

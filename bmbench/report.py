@@ -19,7 +19,8 @@ AGENT_NAMES = {"claude_code": "Claude Code", "codex": "Codex"}
 CSV_FIELDS = [
     "problem_id", "attempt", "human_solvable", "status", "score", "correct", "cheated",
     "answer", "normalized_answer", "cost_usd", "num_turns", "agent_seconds",
-    "timed_out", "finalized_after_timeout", "nudges", "n_tool_calls", "output_tokens", "cost_incomplete", "graded",
+    "timed_out", "finalized_after_timeout", "out_of_memory", "nudges", "n_tool_calls",
+    "output_tokens", "cost_incomplete", "graded",
 ]
 
 
@@ -36,7 +37,7 @@ def collect(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         rec = {
             **{k: r.get(k) for k in ("problem_id", "attempt", "human_solvable", "status", "answer", "cost_usd",
                                       "num_turns", "agent_seconds", "timed_out", "finalized_after_timeout", "nudges",
-                                      "cost_incomplete")},
+                                      "out_of_memory", "cost_incomplete")},
             "output_tokens": (r.get("tokens") or {}).get("output_tokens"),
             "n_tool_calls": sum((r.get("tool_counts") or {}).values()),
             "graded": g is not None,
@@ -125,17 +126,20 @@ def _markdown(run_dir: Path, metrics: dict[str, Any], problems: list[dict[str, A
         hist = ", ".join(f"{c} ({n} problem{'s' if n != 1 else ''})" for c, n in m["solve_histogram"].items())
         context = [f"timed out {m['timed_out']} of {m['n_attempts']} attempts"
                    + (f" ({_by_problem(problems, 'timed_out')})" if m["timed_out"] else ""),
+                   f"ran out of memory {m['out_of_memory']}"
+                   + (f" ({_by_problem(problems, 'out_of_memory')})" if m["out_of_memory"] else ""),
                    f"flagged for cheating {m['cheated']}" + (f" ({_by_problem(problems, 'cheated')})" if m["cheated"] else "")]
         incomplete = sum(1 for rec in graded if rec.get("cost_incomplete"))
         lines += ["", f"Correct attempts per problem: {hist}", "", "Context: " + " · ".join(context)]
         if incomplete:
-            lines += ["", f"Mean cost is a lower bound: {incomplete} timed-out attempt(s) did not report their cost."]
+            lines += ["", f"Mean cost is a lower bound: {incomplete} attempt(s) were stopped before reporting their cost."]
 
     lines += ["", "## Per problem", "", "| problem | human-solvable | correct | agreement | answers (✓/✗ per attempt) | "
               "notes | mean cost | mean min |", "|---|---|---|---|---|---|---|---|"]
     for t in problems:
         cells = " · ".join(f"{'✓' if s else '✗'} {(a or '(none)')[:40]}" for a, s in zip(t["answers"], t["scores"], strict=True))
-        notes = ", ".join(f"{t[key]} {label}" for key, label in (("timed_out", "timed out"), ("cheated", "cheated"))
+        notes = ", ".join(f"{t[key]} {label}" for key, label in (("timed_out", "timed out"),
+                                                                 ("out_of_memory", "out of memory"), ("cheated", "cheated"))
                           if t[key])
         lines.append(f"| {t['problem_id']} | {t['human_solvable']} | {t['correct']}/{t['n']} | "
                      f"{_pct(t['answer_agreement'])} | {cells.replace('|', '/')} | {notes or '–'} | "
@@ -145,5 +149,8 @@ def _markdown(run_dir: Path, metrics: dict[str, Any], problems: list[dict[str, A
               f"pass@{k} = share of problems solved in at least one of the {k} attempts · pass^{k} = share solved "
               f"in all {k} · answer agreement = share of attempts giving the problem's most common answer, right or "
               "wrong · cost = API-price estimate per attempt (not what a subscription is billed) · "
-              "timed out = hit the time limit (the agent then got one turn to give its best answer)."]
+              "timed out = hit the time limit (the agent then got one turn to give its best answer) · "
+              "out of memory = the agent was killed twice for going over the memory limit, before the time "
+              "limit (resumed with the time it had left after the first kill, it got one turn to give its best "
+              "answer after the second)."]
     return "\n".join(lines) + "\n"

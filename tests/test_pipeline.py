@@ -9,6 +9,7 @@ from bmbench import grader, runner
 from bmbench.config import GraderConfig, RunConfig
 from bmbench.dataset import PREPARED_MARKER, problem_data_dir
 from bmbench.runner import ProblemData, remove_workspace, attempt_dir
+from bmbench.sandbox import ExecResult
 
 
 def test_remove_workspace_lists_then_deletes(tmp_path):
@@ -198,3 +199,89 @@ def test_flatten_moves_session_files_up(tmp_path):
     runner.flatten(root)
     assert sorted(p.name for p in root.iterdir()) == ["rollout-a.jsonl", "s1.jsonl", "subagents_s1.jsonl"]
     runner.flatten(tmp_path / "missing")  # no session copied: nothing to do
+
+
+class _ScriptedBox:
+    """A sandbox whose agent invocations follow a script: (exit code, seconds, memory
+    kills meanwhile, stream-json lines the agent prints)."""
+
+    script: list = []
+
+    def __init__(self, **_kw):
+        self.kills, self.calls, self.prompts, self.pkills = 0, [], [], 0
+
+    async def start(self): pass
+    async def stop(self): pass
+    async def copy_out(self, *_a): return False
+    async def proxy_log(self, *_a): return False
+    async def oom_kills(self): return self.kills
+
+    async def kill_agent_processes(self):
+        self.pkills += 1
+
+    async def exec(self, argv, *, stdin_path, stdout_path, **_kw):
+        code, seconds, kills, lines = type(self).script[len(self.calls)]
+        self.calls.append(argv)
+        self.prompts.append(stdin_path.name)
+        self.kills += kills
+        stdout_path.write_text("".join(json.dumps(e) + "\n" for e in lines))
+        return ExecResult(code=code, timed_out=False, seconds=seconds)
+
+
+def _attempt(tmp_path, monkeypatch, script):
+    from bmbench.agents.base import make_agent
+    from bmbench.dataset import Problem
+
+    cfg = RunConfig()
+    cfg.dataset.root = str(tmp_path / "data")
+    src = problem_data_dir(cfg.dataset.name, "hb001", cfg.dataset.root)
+    src.mkdir(parents=True)
+    (src / "reads.fq").write_text("@r\nACGT\n+\nIIII\n")
+    (src / PREPARED_MARKER).write_text("")
+    boxes = []
+    _ScriptedBox.script = script
+    monkeypatch.setattr(runner, "DockerSandbox", lambda **kw: boxes.append(_ScriptedBox(**kw)) or boxes[-1])
+    problem = Problem("hb001", "Which gene?", "GENEA", ("ncbi.nlm.nih.gov",), "yes")
+    result = asyncio.run(runner.run_attempt(cfg, make_agent(cfg.agent), problem, 1, tmp_path / "run"))
+    return result, boxes[0]
+
+
+_WORKING = {"type": "assistant", "message": {"id": "m1", "content": [
+    {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "mmseqs easy-cluster all.fa otu tmp"}}]}}
+_ANSWER = {"type": "result", "subtype": "success", "is_error": False, "result": "<answer>GENEA</answer>",
+           "num_turns": 3, "total_cost_usd": 0.1}
+
+
+def test_agent_killed_for_memory_is_resumed_not_timed_out(tmp_path, monkeypatch):
+    # the kernel killed mmseqs and then the agent CLI (exit 137) 200 s into a 1 h limit
+    result, box = _attempt(tmp_path, monkeypatch, [(137, 200.0, 2, [_WORKING]), (0, 50.0, 0, [_ANSWER])])
+    assert [s["kind"] for s in result["segments"]] == ["main", "oom_resume1"]
+    assert result["status"] == "completed" and result["answer"] == "GENEA"
+    assert not result["timed_out"] and not result["out_of_memory"]
+    assert result["oom_kills"] == 2 and result["agent_oom_kills"] == 1
+    assert box.pkills == 1  # what the killed agent left running was stopped first
+    assert "--resume" in box.calls[1] and box.calls[1][3] == "3400"  # the time it had left
+
+
+def test_kill_at_the_time_limit_is_still_a_timeout(tmp_path, monkeypatch):
+    # `timeout` sends SIGKILL (137) 30 s after the limit when the agent ignores SIGTERM
+    result, _ = _attempt(tmp_path, monkeypatch, [(137, 3630.0, 0, [_WORKING]), (0, 10.0, 0, [_ANSWER])])
+    assert [s["kind"] for s in result["segments"]] == ["main", "finalize"]
+    assert result["timed_out"] and result["agent_oom_kills"] == 0
+
+
+def test_agent_killed_for_memory_twice_is_out_of_memory_with_a_final_turn(tmp_path, monkeypatch):
+    result, box = _attempt(tmp_path, monkeypatch, [(137, 200.0, 1, [_WORKING]), (137, 300.0, 1, [_WORKING]),
+                                                   (0, 10.0, 0, [_ANSWER])])
+    assert [s["kind"] for s in result["segments"]] == ["main", "oom_resume1", "finalize"]
+    assert result["out_of_memory"] and not result["timed_out"] and result["answer"] == "GENEA"
+    assert box.prompts[2] == "out_of_memory_final.md" and box.calls[2][3] == "180"
+
+
+def test_resume_after_a_memory_kill_that_runs_out_of_time_is_a_timeout(tmp_path, monkeypatch):
+    # killed for memory with a minute left; the resumed session then hits the time limit
+    result, box = _attempt(tmp_path, monkeypatch, [(137, 3540.0, 1, [_WORKING]), (124, 60.0, 0, [_WORKING]),
+                                                   (0, 10.0, 0, [_ANSWER])])
+    assert [s["kind"] for s in result["segments"]] == ["main", "oom_resume1", "finalize"]
+    assert box.calls[1][3] == "60" and box.prompts[2] == "finalize.md"
+    assert result["timed_out"] and result["finalized_after_timeout"] and not result["out_of_memory"]

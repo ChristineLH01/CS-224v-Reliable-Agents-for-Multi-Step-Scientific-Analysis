@@ -222,6 +222,16 @@ class DockerSandbox:
         """Everything the agent started (background jobs included); PID 1 survives."""
         await run_cmd("docker", "exec", "-u", "0", self.name, "pkill", "-KILL", "-u", AGENT_USER, check=False)
 
+    async def oom_kills(self) -> int:
+        """How many processes the kernel has killed for memory in this container so far
+        (the container's memory cgroup counts them; v2 `memory.events`, v1 `memory.oom_control`)."""
+        _, out, _ = await run_cmd(
+            "docker", "exec", "-u", "0", self.name, "cat", "/sys/fs/cgroup/memory.events",
+            "/sys/fs/cgroup/memory/memory.oom_control", check=False,
+        )
+        found = re.search(r"^oom_kill (\d+)$", out, re.M)
+        return int(found.group(1)) if found else 0
+
     async def copy_out(self, src: str, dest: Path) -> bool:
         dest.parent.mkdir(parents=True, exist_ok=True)
         code, _, _ = await run_cmd("docker", "cp", f"{self.name}:{src}", str(dest), check=False)

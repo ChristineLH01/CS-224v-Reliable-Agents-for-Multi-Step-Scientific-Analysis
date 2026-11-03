@@ -76,7 +76,7 @@ def test_report_table_and_context(tmp_path):
         d.mkdir(parents=True)
         (d / "result.json").write_text(json.dumps({
             "problem_id": "A", "attempt": k, "human_solvable": "yes", "status": "completed", "answer": "GENEA",
-            "cost_usd": 0.5, "agent_seconds": 60, "timed_out": timed_out}))
+            "cost_usd": 0.5, "agent_seconds": 60, "timed_out": timed_out, "out_of_memory": k == 2}))
         (d / "grade.json").write_text(json.dumps({"score": score, "correct": bool(score), "cheated": False,
                                                   "normalized_answer": "GENEA", "judge": {"model": "gpt-6-sol"}}))
     m = write_report(tmp_path)["all"]
@@ -85,3 +85,4 @@ def test_report_table_and_context(tmp_path):
     assert "| all | 1 | 3 | 67% | 100% | 0% | 100% | $0.50 | 1.0 |" in report
     assert "Correct attempts per problem: 2/3 (1 problem)" in report
     assert "timed out 1 of 3 attempts (A ×1)" in report and "graded by `gpt-6-sol`" in report
+    assert "ran out of memory 1 (A ×1)" in report and "| 1 timed out, 1 out of memory |" in report

@@ -17,7 +17,8 @@ from bmbench.agents.base import Agent
 from bmbench.config import SECRET_ENV
 from bmbench.trajectory import Segment, Step
 
-#: exit status of coreutils `timeout` when the limit fired (137 if it had to SIGKILL)
+#: exit status of coreutils `timeout` when the limit fired (137 if it had to SIGKILL; an
+#: out-of-memory kill also ends in 137, and the runner tells the two apart)
 TIMEOUT_EXIT_CODES = (124, 137)
 #: system events that carry no information for a transcript (progress ticks, the init header)
 _QUIET_SYSTEM = {None, "init", "thinking_tokens", "status"}
@@ -62,6 +63,9 @@ class ClaudeCodeAgent(Agent):
             # assemblies routinely run longer.
             "BASH_DEFAULT_TIMEOUT_MS": "600000",
             "BASH_MAX_TIMEOUT_MS": "3600000",
+            # Each Bash-tool command goes first to the OOM killer, before Claude Code
+            # itself (the wrapper is in the sandbox image).
+            "CLAUDE_CODE_SHELL_PREFIX": "/usr/local/libexec/bmbench/oom-first",
         }
         env.update(self.cfg.env)
         return env
