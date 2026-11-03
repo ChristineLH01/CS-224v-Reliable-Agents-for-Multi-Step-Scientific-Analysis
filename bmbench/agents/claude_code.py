@@ -25,7 +25,7 @@ _QUIET_SYSTEM = {None, "init", "thinking_tokens", "status"}
 
 class ClaudeCodeAgent(Agent):
     name = "claude_code"
-    session_dirs = ("/home/agent/.claude",)
+    session_dirs = ("/home/agent/.claude/projects",)  # the session logs, not settings or backups
     secret_env = SECRET_ENV
 
     @property

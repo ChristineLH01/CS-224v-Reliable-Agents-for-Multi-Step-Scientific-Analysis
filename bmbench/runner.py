@@ -166,6 +166,13 @@ def remove_workspace(workspace: Path, listing: Path) -> None:
     rmtree(workspace)
 
 
+def remove_empty_logs(adir: Path) -> None:
+    """Drop the stderr logs of segments that printed nothing there (the usual case)."""
+    for log in adir.glob("stderr.*.log"):
+        if log.stat().st_size == 0:
+            log.unlink()
+
+
 def remove_inputs(data_dir: Path, inputs: list[str]) -> None:
     """Delete the cloned input files but keep anything the agent added next to them."""
     for rel in inputs:
@@ -285,18 +292,15 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
             if seg.timed_out:
                 if agent.cfg.finalize_on_timeout and not finalized:
                     await box.kill_agent_processes()
-                    finalize = adir / "finalize.md"
-                    finalize.write_text(resolve("prompts/finalize.md").read_text(encoding="utf-8"), encoding="utf-8")
                     finalized = True
-                    seg = await invoke("finalize", finalize, agent.cfg.finalize_timeout_s, resume=True)
+                    seg = await invoke("finalize", resolve("prompts/finalize.md"), agent.cfg.finalize_timeout_s,
+                                       resume=True)
                     continue
                 break
             remaining = sb.timeout_s - sum(s.seconds for s in segments if s.kind != "finalize")
             if seg.got_result and not seg.is_error and nudges < agent.cfg.max_nudges and remaining > 60:
                 nudges += 1
-                nudge = adir / "nudge.md"
-                nudge.write_text(resolve("prompts/nudge.md").read_text(encoding="utf-8"), encoding="utf-8")
-                seg = await invoke(f"nudge{nudges}", nudge, remaining, resume=True)
+                seg = await invoke(f"nudge{nudges}", resolve("prompts/nudge.md"), remaining, resume=True)
                 continue
             break
     except asyncio.CancelledError:
@@ -316,6 +320,7 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
             remove_workspace(workspace, adir / "workspace_files.tsv")
         elif sb.input_mode == "copy" and not sb.keep_input_data:
             remove_inputs(workspace / "data", inputs)
+        remove_empty_logs(adir)  # every segment is parsed by now
 
         answer, final_text = final_answer(segments)
         status, err_kind = classify(segments, answer)

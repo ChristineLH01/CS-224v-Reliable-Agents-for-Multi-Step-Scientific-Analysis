@@ -102,7 +102,7 @@ share a folder.
 | `report.md` | setup, summary table, one row per problem |
 | `metrics.json`, `attempts.csv` | all metrics; one row per attempt |
 | `problems/<problem>/prompt.md` | the prompt, shared by all attempts at the problem |
-| `problems/<problem>/attempt-<k>/` | one attempt: transcript, raw agent output, result, grade, network log, `workspace_files.tsv` |
+| `problems/<problem>/attempt-<k>/` | one attempt: transcript, raw agent output, the agent's own session log, result, grade, network log, `workspace_files.tsv` |
 
 **Storage.** To analyze the data, agents often download large files, such as reference genomes
 and databases (several GB in some attempts). These only serve to reach the answer, so each

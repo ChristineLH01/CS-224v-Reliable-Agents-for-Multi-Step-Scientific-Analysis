@@ -172,3 +172,17 @@ def test_run_names_follow_the_settings():
         "full_codex_gpt-6-1-sol_high_timeout-90min_1-attempt"
     assert load_config("configs/codex_full.yaml", ["run_name=mine"]).run_name == "mine"
     assert attempt_dir(tmp := runner.Path("/r"), "hb035", 2) == tmp / "problems" / "hb035" / "attempt-2"
+
+
+def test_only_session_logs_and_nonempty_stderr_are_kept(tmp_path):
+    from bmbench.agents.claude_code import ClaudeCodeAgent
+    from bmbench.agents.codex import CodexAgent
+    from bmbench.config import AgentConfig
+
+    assert ClaudeCodeAgent(AgentConfig()).session_dirs == ("/home/agent/.claude/projects",)
+    assert CodexAgent(AgentConfig(type="codex")).session_dirs == ("/home/agent/.codex/sessions",)
+    (tmp_path / "stderr.main.log").write_text("")
+    (tmp_path / "stderr.finalize.log").write_text("warning: something\n")
+    (tmp_path / "stream.main.jsonl").write_text("")  # raw output is kept even when empty
+    runner.remove_empty_logs(tmp_path)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["stderr.finalize.log", "stream.main.jsonl"]
