@@ -19,9 +19,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: Auth variables forwarded (by name, never by value on a command line) into the sandbox.
 SECRET_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
-#: The judge's OpenAI-compatible endpoint (a LiteLLM proxy). Read on the host only:
-#: never forwarded into a sandbox.
-JUDGE_URL_ENV, JUDGE_KEY_ENV = "LITELLM_BASE_URL", "LITELLM_API_KEY"
+#: The OpenAI-compatible LiteLLM proxy: the judge calls it from the host, and the
+#: Codex agent uses it as its model provider (the key is passed into Codex sandboxes only).
+LITELLM_URL_ENV, LITELLM_KEY_ENV = "LITELLM_BASE_URL", "LITELLM_API_KEY"
 
 
 @dataclass
@@ -37,23 +37,19 @@ class DatasetConfig:
 
 @dataclass
 class AgentConfig:
-    type: str = "claude_code"
+    type: str = "claude_code"  # claude_code | codex
     model: str = "claude-opus-5-5"
     effort: str | None = "high"
+    # Claude Code only. WebSearch runs on Anthropic's servers, so the egress proxy
+    # cannot hold it to the problem's allowed domains. AskUserQuestion has nobody to answer it.
     permission_mode: str = "bypassPermissions"
-    # WebSearch runs on Anthropic's servers, so the egress proxy cannot hold it to
-    # the problem's allowed domains. AskUserQuestion has nobody to answer it.
     disallowed_tools: list[str] = field(default_factory=lambda: ["WebSearch", "AskUserQuestion"])
     max_budget_usd: float | None = None
+    # (input, cached input, output) USD per million tokens, for agents that do not
+    # report a cost themselves (Codex)
+    usd_per_mtok: list[float] | None = None
     extra_args: list[str] = field(default_factory=list)
-    env: dict[str, str] = field(
-        default_factory=lambda: {
-            # Claude Code's Bash tool defaults to a 2 min timeout (10 min max);
-            # alignments and assemblies routinely run longer.
-            "BASH_DEFAULT_TIMEOUT_MS": "600000",
-            "BASH_MAX_TIMEOUT_MS": "3600000",
-        }
-    )
+    env: dict[str, str] = field(default_factory=dict)  # on top of the adapter's own defaults
     # After a wall-clock timeout: one resumed turn asking for the best answer so far.
     finalize_on_timeout: bool = True
     finalize_timeout_s: int = 180
@@ -70,10 +66,9 @@ class SandboxConfig:
     memory: str = "3.5g"
     timeout_s: int = 3600  # wall clock for the main agent call
     network: str = "allowlist"  # allowlist | open
-    # Hosts the agent itself needs on top of the problem's allowed_domains.
-    infra_domains: list[str] = field(
-        default_factory=lambda: ["api.anthropic.com", "files.pythonhosted.org"]
-    )
+    # Hosts every agent needs on top of the problem's allowed_domains (pip downloads
+    # wheels from files.pythonhosted.org). Each adapter adds its own model API host.
+    infra_domains: list[str] = field(default_factory=lambda: ["files.pythonhosted.org"])
     extra_allowed_domains: list[str] = field(default_factory=list)
     # Replace the problem's allowed_domains entirely (e.g. [] for an offline ablation).
     override_allowed_domains: list[str] | None = None
@@ -192,5 +187,5 @@ def load_dotenv(path: str | Path | None = None) -> None:
 
 def secret_values() -> list[str]:
     """Values to scrub from anything the harness saves."""
-    names = (*SECRET_ENV, JUDGE_KEY_ENV, "HF_TOKEN")
+    names = (*SECRET_ENV, LITELLM_KEY_ENV, "HF_TOKEN")
     return [v for n in names if (v := os.environ.get(n)) and len(v) >= 8]

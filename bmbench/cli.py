@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 
 from bmbench.config import REPO_ROOT, load_config, load_dotenv, resolve
@@ -37,8 +38,8 @@ def cmd_tasks(a: argparse.Namespace) -> None:
         print(f"{p.id:22s} {p.human_solvable:8s} {size:>9s}  {q[:90]}{'…' if len(q) > 90 else ''}")
 
 
-def _host_claude_version() -> str | None:
-    exe = shutil.which("claude")
+def _host_version(cli: str) -> str | None:
+    exe = shutil.which(cli)
     if not exe:
         return None
     out = subprocess.run([exe, "--version"], capture_output=True, text=True).stdout
@@ -48,14 +49,18 @@ def _host_claude_version() -> str | None:
 
 def cmd_build(a: argparse.Namespace) -> None:
     cfg = load_config(a.config, a.set)
-    version = a.claude_version or _host_claude_version() or "stable"
+    claude = a.claude_version or _host_version("claude") or "stable"
+    codex = a.codex_version or _host_version("codex")
     uid, gid = (os.getuid(), os.getgid()) if hasattr(os, "getuid") else (1000, 1000)
     common = ["--no-cache"] if a.no_cache else []
     if cfg.sandbox.platform:
         common += ["--platform", cfg.sandbox.platform]
+    versions = ["--build-arg", f"CLAUDE_CODE_VERSION={claude}"]
+    if codex:  # otherwise the Dockerfile's pinned default
+        versions += ["--build-arg", f"CODEX_VERSION={codex}"]
     steps = [
         ["docker", "build", *common, "--build-arg", f"AGENT_UID={uid}", "--build-arg", f"AGENT_GID={gid}",
-         "--build-arg", f"CLAUDE_CODE_VERSION={version}", "-t", cfg.sandbox.image, str(REPO_ROOT / "docker/sandbox")],
+         *versions, "-t", cfg.sandbox.image, str(REPO_ROOT / "docker/sandbox")],
         ["docker", "build", *common, "-t", cfg.sandbox.proxy_image, str(REPO_ROOT / "docker/proxy")],
     ]
     if a.only:
@@ -64,14 +69,18 @@ def cmd_build(a: argparse.Namespace) -> None:
         print("+", " ".join(argv))
         if subprocess.run(argv).returncode != 0:
             sys.exit(f"build failed: {' '.join(argv[:4])}")
-    print(f"built {cfg.sandbox.image} (Claude Code {version}) and {cfg.sandbox.proxy_image}")
+    print(f"built {cfg.sandbox.image} (Claude Code {claude}, Codex {codex or 'Dockerfile default'}) "
+          f"and {cfg.sandbox.proxy_image}")
 
 
 async def _doctor(a: argparse.Namespace) -> int:
+    from bmbench.agents.base import make_agent  # noqa: PLC0415
     from bmbench.grader import ANSWER_SCHEMA, judge, judge_endpoint  # noqa: PLC0415
     from bmbench.sandbox import DockerSandbox, docker_ok, image_info, run_cmd  # noqa: PLC0415
+    from bmbench.trajectory import Segment  # noqa: PLC0415
 
     cfg = load_config(a.config, a.set)
+    agent = make_agent(cfg.agent)
     bad = 0
 
     def report(ok: bool, what: str, detail: str = "") -> None:
@@ -86,10 +95,12 @@ async def _doctor(a: argparse.Namespace) -> int:
     for img in (cfg.sandbox.image, cfg.sandbox.proxy_image):
         meta = await image_info(img)
         report(meta is not None, f"image {img}", (meta or {}).get("architecture", "missing: run `bmbench build`"))
-    _, ver, _ = await run_cmd("docker", "run", "--rm", "-u", "agent", cfg.sandbox.image, "claude", "--version", check=False)
-    report(bool(ver.strip()), "Claude Code in image", ver.strip())
-    auth = [k for k in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY") if os.environ.get(k)]
-    report(bool(auth), "agent auth in environment/.env", ", ".join(auth) or "set CLAUDE_CODE_OAUTH_TOKEN (claude setup-token) or ANTHROPIC_API_KEY")
+    _, ver, _ = await run_cmd("docker", "run", "--rm", "-u", "agent", cfg.sandbox.image, *agent.version_command(),
+                              check=False)
+    report(bool(ver.strip()), f"{agent.name} in image", ver.strip())
+    auth = [k for k in agent.secret_env if os.environ.get(k)]
+    report(bool(auth), f"{agent.name} credentials in environment/.env",
+           ", ".join(auth) or f"set one of {', '.join(agent.secret_env)}")
     try:
         problems = load_problems(cfg.dataset.name, cfg.dataset.root)
         base = dataset_dir(cfg.dataset.name, cfg.dataset.root) / "tasks"
@@ -120,7 +131,8 @@ async def _doctor(a: argparse.Namespace) -> int:
     if cfg.sandbox.network == "allowlist":
         with tempfile.TemporaryDirectory(prefix="bmb-doctor-") as tmp:
             box = DockerSandbox(name="bmb-doctor", cfg=cfg.sandbox, workspace=Path(tmp),
-                                allowed_domains=["ftp.ncbi.nlm.nih.gov", *cfg.sandbox.infra_domains])
+                                allowed_domains=["ftp.ncbi.nlm.nih.gov", *cfg.sandbox.infra_domains,
+                                                 *agent.infra_domains])
             try:
                 await box.start()
                 probe = (
@@ -145,23 +157,19 @@ async def _doctor(a: argparse.Namespace) -> int:
                     report(got_ok == expect_ok, f"network: {label}", f"{url} -> {out.strip()}")
                 if a.auth_check:
                     if not auth:
-                        report(False, "Claude auth through the sandbox", "no auth configured")
+                        report(False, f"{agent.name} auth through the sandbox", "no credentials configured")
                     else:
+                        # the real agent invocation, with a one-word task
                         tmp_prompt = Path(tmp) / "p.txt"
                         tmp_prompt.write_text("Reply with exactly: OK", encoding="utf-8")
-                        out_path, err_path = Path(tmp) / "o.json", Path(tmp) / "e.txt"
-                        argv = ["claude", "-p", "--model", cfg.agent.model, "--effort", "low", "--tools", "",
-                                "--output-format", "json", "--no-session-persistence"]
-                        await box.exec(argv, stdin_path=tmp_prompt, stdout_path=out_path, stderr_path=err_path,
-                                       deadline_s=180)
-                        text = out_path.read_text(encoding="utf-8", errors="replace") if out_path.exists() else ""
-                        try:
-                            data = json.loads(text.strip().splitlines()[-1])
-                            ok = not data.get("is_error") and "OK" in str(data.get("result"))
-                            detail = f"{cfg.agent.model}: {str(data.get('result'))[:80]!r}"
-                        except (json.JSONDecodeError, IndexError):
-                            ok, detail = False, (text + err_path.read_text(encoding="utf-8", errors="replace"))[-400:]
-                        report(ok, "Claude auth + API through the proxy", detail)
+                        out_path, err_path = Path(tmp) / "o.jsonl", Path(tmp) / "e.txt"
+                        argv = agent.command(timeout_s=150, session_id=str(uuid.uuid4()))
+                        res = await box.exec(argv, stdin_path=tmp_prompt, stdout_path=out_path, stderr_path=err_path,
+                                             deadline_s=180, env=agent.env(), secret_env=agent.secret_env)
+                        seg = agent.parse(out_path, err_path, Segment(kind="doctor", exit_code=res.code))
+                        ok = "OK" in seg.final_text and not seg.is_error
+                        detail = f"{cfg.agent.model}: {seg.final_text.strip()[:80]!r}" if ok else seg.error_text[-400:]
+                        report(ok, f"{agent.name} auth + model API through the proxy", detail)
             finally:
                 await box.stop()
     print("all checks passed" if not bad else f"{bad} problem(s) found")
@@ -267,6 +275,7 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("build", help="build the sandbox and proxy images")
     with_config(sp)
     sp.add_argument("--claude-version", help="Claude Code version to install (default: the host's)")
+    sp.add_argument("--codex-version", help="Codex CLI version to install (default: the host's, else the Dockerfile's)")
     sp.add_argument("--no-cache", action="store_true")
     sp.add_argument("--only", choices=["sandbox", "proxy"])
     sp.set_defaults(fn=cmd_build)

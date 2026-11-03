@@ -20,7 +20,8 @@ _AUTH_PAT = re.compile(
     re.IGNORECASE,
 )
 _LIMIT_PAT = re.compile(
-    r"rate[_ ]limit|usage limit|limit reached|overloaded|\b429\b|\b529\b|credit balance is too low",
+    r"rate[_ ]limit|usage limit|limit reached|overloaded|\b429\b|\b529\b|credit balance is too low|"
+    r"budget has been exceeded|exceeded budget|ExceededBudget",
     re.IGNORECASE,
 )
 
@@ -42,9 +43,17 @@ class Agent(ABC):
     #: directories inside the sandbox holding the agent's own session records,
     #: copied into the trial directory after the run
     session_dirs: tuple[str, ...] = ()
+    #: host environment variables holding this agent's credentials, passed into the
+    #: sandbox by name only (never another agent's)
+    secret_env: tuple[str, ...] = ()
 
     def __init__(self, cfg: AgentConfig) -> None:
         self.cfg = cfg
+
+    @property
+    def infra_domains(self) -> tuple[str, ...]:
+        """Hosts the agent itself must reach (its model API), admitted by the proxy."""
+        return ()
 
     @abstractmethod
     def command(self, *, timeout_s: int, session_id: str, resume: bool = False,
@@ -64,6 +73,15 @@ class Agent(ABC):
         sandbox), which survive a killed invocation that never printed its totals."""
         return None
 
+    def cost_from_tokens(self, tokens: dict[str, int] | None) -> float | None:
+        """Dollar cost for agents that do not report one; None = use the reported cost."""
+        return None
+
+    def subagent_segments(self, session_root: Path) -> list[Segment]:
+        """Subagent work the CLI's own output stream leaves out, recovered from its
+        session records, so the transcript and the cheating audit see every tool call."""
+        return []
+
     def version_command(self) -> list[str]:
         return []
 
@@ -73,4 +91,8 @@ def make_agent(cfg: AgentConfig) -> Agent:
         from bmbench.agents.claude_code import ClaudeCodeAgent  # noqa: PLC0415
 
         return ClaudeCodeAgent(cfg)
-    raise ValueError(f"unknown agent type {cfg.type!r} (available: claude_code)")
+    if cfg.type == "codex":
+        from bmbench.agents.codex import CodexAgent  # noqa: PLC0415
+
+        return CodexAgent(cfg)
+    raise ValueError(f"unknown agent type {cfg.type!r} (available: claude_code, codex)")

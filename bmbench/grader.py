@@ -7,9 +7,9 @@ sees only what it needs:
   1. correctness -- question, rubric, the extracted answer (+ final message as context)
   2. cheating    -- question, every tool call, regex pre-flags, the proxy log
 
-Both judges are one chat-completions call to a model from another family than the
-agent (default GPT-6 Sol), through the OpenAI-compatible LiteLLM proxy named in
-LITELLM_BASE_URL. The call runs on the host; the key never enters a sandbox.
+Both judges are one chat-completions call to one fixed model for every agent
+(default GPT-6 Sol), through the OpenAI-compatible LiteLLM proxy named in
+LITELLM_BASE_URL. The call runs on the host, outside any sandbox.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from typing import Any
 
 import truststore
 
-from bmbench.config import JUDGE_KEY_ENV, JUDGE_URL_ENV, GraderConfig, resolve
+from bmbench.config import LITELLM_KEY_ENV, LITELLM_URL_ENV, GraderConfig, resolve
 from bmbench.dataset import Problem
 from bmbench.trajectory import Segment, Step, action_log, tool_inputs_text
 
@@ -158,10 +158,10 @@ def _clip(text: str, limit: int) -> str:
 
 def judge_endpoint() -> tuple[str, str]:
     """(chat-completions URL, API key) from the environment / .env."""
-    base = os.environ.get(JUDGE_URL_ENV, "").strip().rstrip("/")
-    key = os.environ.get(JUDGE_KEY_ENV, "").strip()
+    base = os.environ.get(LITELLM_URL_ENV, "").strip().rstrip("/")
+    key = os.environ.get(LITELLM_KEY_ENV, "").strip()
     if not base or not key:
-        raise RuntimeError(f"judge not configured: set {JUDGE_URL_ENV} and {JUDGE_KEY_ENV} in .env")
+        raise RuntimeError(f"judge not configured: set {LITELLM_URL_ENV} and {LITELLM_KEY_ENV} in .env")
     return (base if base.endswith("/chat/completions") else base + "/chat/completions"), key
 
 

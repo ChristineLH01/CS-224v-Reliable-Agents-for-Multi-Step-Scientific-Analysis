@@ -19,7 +19,7 @@ import signal
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from bmbench.config import SECRET_ENV, SandboxConfig
+from bmbench.config import SandboxConfig
 
 LABEL = "bmbench"
 WORKDIR = "/workspace"
@@ -176,18 +176,21 @@ class DockerSandbox:
         stderr_path: Path,
         deadline_s: float,
         env: dict[str, str] | None = None,
+        secret_env: tuple[str, ...] = (),
         user: str = AGENT_USER,
     ) -> ExecResult:
         """Run `argv` in the container, streaming stdout/stderr to files.
 
         `deadline_s` is the harness's safety net; the agent command is expected to
         carry its own `timeout` (exit 124) so it can end gracefully first.
+        `secret_env` names host variables passed by name only (the agent's own key),
+        so their values never appear on a command line.
         """
         args = ["docker", "exec", "-i", "-u", user, "-w", WORKDIR]
         for k, v in (env or {}).items():
             args += ["-e", f"{k}={v}"]
         host_env = os.environ.copy()
-        for k in SECRET_ENV:
+        for k in secret_env:
             if os.environ.get(k):
                 args += ["-e", k]  # value taken from our environment, not argv
         args += [self.name, *argv]

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from bmbench.agents.base import Agent
+from bmbench.config import SECRET_ENV
 from bmbench.trajectory import Segment, Step
 
 #: exit status of coreutils `timeout` when the limit fired (137 if it had to SIGKILL)
@@ -25,6 +26,11 @@ _QUIET_SYSTEM = {None, "init", "thinking_tokens", "status"}
 class ClaudeCodeAgent(Agent):
     name = "claude_code"
     session_dirs = ("/home/agent/.claude",)
+    secret_env = SECRET_ENV
+
+    @property
+    def infra_domains(self) -> tuple[str, ...]:
+        return ("api.anthropic.com",)
 
     def command(self, *, timeout_s: int, session_id: str, resume: bool = False,
                 budget_usd: float | None = None) -> list[str]:
@@ -52,6 +58,10 @@ class ClaudeCodeAgent(Agent):
         env = {
             "DISABLE_AUTOUPDATER": "1",
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            # The Bash tool defaults to a 2 min timeout (10 min max); alignments and
+            # assemblies routinely run longer.
+            "BASH_DEFAULT_TIMEOUT_MS": "600000",
+            "BASH_MAX_TIMEOUT_MS": "3600000",
         }
         env.update(self.cfg.env)
         return env

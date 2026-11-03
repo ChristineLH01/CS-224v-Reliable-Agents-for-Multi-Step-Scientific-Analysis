@@ -75,10 +75,17 @@ def test_prompt_never_contains_the_rubric():
     assert "answer_rubric" not in p.public()
 
 
-def test_effective_domains_adds_infra_only_to_proxy():
+def test_effective_domains_adds_infra_only_to_proxy(monkeypatch):
+    from bmbench.agents.base import make_agent
+
     cfg = load_config("configs/claude_code_preview.yaml")
-    told, admitted = effective_domains(problem(), cfg)
+    told, admitted = effective_domains(problem(), cfg, make_agent(cfg.agent).infra_domains)
     assert "api.anthropic.com" not in told and "api.anthropic.com" in admitted
+    assert "files.pythonhosted.org" in admitted
+    monkeypatch.setenv("LITELLM_BASE_URL", "https://models.example.edu/v1/chat/completions")
+    codex = load_config("configs/codex_preview.yaml")
+    _, admitted = effective_domains(problem(), codex, make_agent(codex.agent).infra_domains)
+    assert "models.example.edu" in admitted and "api.anthropic.com" not in admitted
     cfg = load_config("configs/claude_code_preview.yaml", ["sandbox.override_allowed_domains=[]"])
     told, admitted = effective_domains(problem(), cfg)
     assert told == [] and "ncbi.nlm.nih.gov" not in admitted

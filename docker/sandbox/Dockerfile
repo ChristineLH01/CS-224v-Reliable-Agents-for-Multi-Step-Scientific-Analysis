@@ -45,6 +45,19 @@ RUN mamba env create -y -f /opt/sandbox/environment.yml \
 RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}" \
  && /home/agent/.local/bin/claude --version
 
+# Codex CLI, pinned: the release's full Linux package (codex plus its tool host,
+# exec server, rg and the bwrap its sandbox uses), checksum-verified -> ~/.local/bin/codex.
+ARG CODEX_VERSION=0.166.0
+RUN set -eux; arch="$(uname -m)"; \
+    pkg="codex-package-${arch}-unknown-linux-musl.tar.gz"; \
+    url="https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}"; \
+    dest=/home/agent/.local/share/codex; mkdir -p "$dest"; cd /tmp; \
+    curl -fsSLO "$url/$pkg"; curl -fsSL "$url/codex-package_SHA256SUMS" | grep "  $pkg\$" | sha256sum -c -; \
+    tar -xzf "$pkg" -C "$dest"; rm -f "$pkg"; \
+    ln -sf "$dest/bin/codex" /home/agent/.local/bin/codex; \
+    ln -sf "$dest/bin/codex-code-mode-host" /home/agent/.local/bin/codex-code-mode-host; \
+    /home/agent/.local/bin/codex --version
+
 COPY --chown=agent TOOLS.md /opt/sandbox/TOOLS.md
 
 # "bio" is the active env for every process (docker exec included), without

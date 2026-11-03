@@ -1,0 +1,30 @@
+# Codex (unchanged) on BioMysteryBench-full (90 problems), under the same settings
+# as configs/claude_code_full.yaml. Questions run one at a time: each one's data is
+# downloaded before its trials and deleted after them.
+run_name: full-data_codex_gpt-6-1-sol_high
+n_trials: 5
+concurrency: 2
+
+dataset:
+  name: full
+  task_ids: null
+  human_solvable: null
+  delete_after_task: true
+
+agent:
+  type: codex
+  model: gpt-6.1-sol
+  effort: high
+  usd_per_mtok: [2.0, 0.10, 10.0]
+
+sandbox:
+  cpus: 16
+  memory: 64g
+  timeout_s: 3600
+  network: allowlist
+  keep_workspace: false
+
+grader:
+  auto: true
+  model: gpt-6-sol
+  effort: medium

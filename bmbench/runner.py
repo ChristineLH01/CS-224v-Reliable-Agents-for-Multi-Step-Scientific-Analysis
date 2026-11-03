@@ -62,12 +62,14 @@ def trial_dir(run_dir: Path, task_id: str, trial: int) -> Path:
     return run_dir / "trials" / task_id / f"r{trial}"
 
 
-def effective_domains(problem: Problem, cfg: RunConfig) -> tuple[list[str], list[str]]:
-    """(domains the agent is told about, domains the proxy admits)."""
+def effective_domains(problem: Problem, cfg: RunConfig,
+                      agent_domains: tuple[str, ...] = ()) -> tuple[list[str], list[str]]:
+    """(domains the agent is told about, domains the proxy admits: those plus the
+    infrastructure every agent needs and this agent's own model API)."""
     sb = cfg.sandbox
     told = list(problem.allowed_domains if sb.override_allowed_domains is None else sb.override_allowed_domains)
     told += [d for d in sb.extra_allowed_domains if d not in told]
-    admitted = told + [d for d in sb.infra_domains if d not in told]
+    admitted = told + [d for d in (*sb.infra_domains, *agent_domains) if d not in told]
     return told, admitted
 
 
@@ -221,7 +223,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
 
     prompt = render_task_prompt(problem, cfg, len(inputs))
     (tdir / "prompt.md").write_text(prompt, encoding="utf-8")
-    _, admitted = effective_domains(problem, cfg)
+    _, admitted = effective_domains(problem, cfg, agent.infra_domains)
     session_id = str(uuid.uuid4())
     started = now()
     loop = asyncio.get_running_loop()
@@ -245,7 +247,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
         argv = agent.command(timeout_s=int(timeout_s), session_id=session_id, resume=resume, budget_usd=budget)
         out, err = tdir / f"stream.{kind}.jsonl", tdir / f"stderr.{kind}.log"
         res = await box.exec(argv, stdin_path=stdin, stdout_path=out, stderr_path=err,
-                             deadline_s=timeout_s + 120, env=agent.env())
+                             deadline_s=timeout_s + 120, env=agent.env(), secret_env=agent.secret_env)
         seg = Segment(kind=kind, exit_code=res.code, timed_out=res.timed_out, seconds=res.seconds)
         seg = agent.parse(out, err, seg)
         segments.append(seg)
@@ -298,8 +300,15 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
         if harness_error:
             status = "harness_error"
         usage_tokens = agent.session_usage(tdir / "agent_session") or _sum_usage(segments)
-        # a segment killed before its result event never reported its dollar cost
-        cost_incomplete = any(not s.got_result and s.steps for s in segments)
+        # a segment killed before its result event never reported its dollar cost;
+        # agents priced from their session's token totals do not have that gap
+        cost = agent.cost_from_tokens(usage_tokens)
+        cost_incomplete = cost is None and any(not s.got_result and s.steps for s in segments)
+        if cost is None:
+            cost = sum(s.cost_usd for s in segments)
+        # what the audit and transcript see: the invocations plus subagent work that
+        # only the agent's session records hold (the answer comes from the main thread)
+        recorded = segments + agent.subagent_segments(tdir / "agent_session")
         result = {
             "task_id": problem.id,
             "trial": trial,
@@ -313,7 +322,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
             "model": agent.cfg.model,
             "effort": agent.cfg.effort,
             "session_id": session_id,
-            "cost_usd": round(sum(s.cost_usd for s in segments), 6),
+            "cost_usd": round(cost, 6),
             "cost_incomplete": cost_incomplete,
             "num_turns": sum(s.num_turns for s in segments),
             "agent_seconds": round(sum(s.seconds for s in segments), 1),
@@ -322,16 +331,16 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
             "timed_out": any(s.timed_out for s in segments),
             "finalized_after_timeout": finalized,
             "nudges": nudges,
-            "tool_counts": tool_counts(segments),
+            "tool_counts": tool_counts(recorded),
             "rate_limit": next((s.rate_limit for s in reversed(segments) if s.rate_limit), {}),
-            "segments": [s.summary() for s in segments],
+            "segments": [s.summary() for s in recorded],
             "started_at": started,
             "finished_at": now(),
         }
         (tdir / "trajectory.json").write_text(
-            json.dumps({"segments": [asdict(s) for s in segments]}, ensure_ascii=False), encoding="utf-8"
+            json.dumps({"segments": [asdict(s) for s in recorded]}, ensure_ascii=False), encoding="utf-8"
         )
-        (tdir / "transcript.md").write_text(render_transcript(problem.id, trial, segments), encoding="utf-8")
+        (tdir / "transcript.md").write_text(render_transcript(problem.id, trial, recorded), encoding="utf-8")
         result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         scrub_secrets(tdir, secret_values())
     return result

@@ -1,0 +1,31 @@
+# Codex (unchanged) on the 5-problem BioMysteryBench preview, under the same
+# sandbox, prompt, limits and judge as configs/claude_code_preview.yaml.
+# The model is reached through the LiteLLM proxy in LITELLM_BASE_URL (.env).
+run_name: preview-data_codex_gpt-6-1-sol_high
+n_trials: 5
+concurrency: 2
+
+dataset:
+  name: preview
+  delete_after_task: true
+
+agent:
+  type: codex
+  model: gpt-6.1-sol
+  effort: high
+  usd_per_mtok: [2.0, 0.10, 10.0]   # input, cached input, output: OpenAI list price, for the cost estimate
+  finalize_on_timeout: true
+  finalize_timeout_s: 180
+  max_nudges: 1
+
+sandbox:
+  cpus: 4
+  memory: 3.5g
+  timeout_s: 3600     # 1 h wall clock per trial
+  network: allowlist
+  keep_workspace: false
+
+grader:
+  auto: true
+  model: gpt-6-sol
+  effort: medium

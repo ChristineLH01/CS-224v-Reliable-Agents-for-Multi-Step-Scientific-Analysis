@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,8 @@ import yaml
 
 from bmbench.metrics import per_task, summarize_by_split
 from bmbench.runner import fmt_memory
+
+AGENT_NAMES = {"claude_code": "Claude Code", "codex": "Codex"}
 
 CSV_FIELDS = [
     "task_id", "trial", "human_solvable", "status", "score", "correct", "cheated",
@@ -78,11 +81,13 @@ def _setup_line(run_dir: Path, n_questions: int, judge: str) -> str:
     inv = json.loads(man_path.read_text(encoding="utf-8"))["invocations"][-1] if man_path.is_file() else {}
     agent, sb = cfg.get("agent") or {}, cfg.get("sandbox") or {}
     n = cfg.get("n_trials", "?")
-    version = (inv.get("agent_version") or "").replace("(Claude Code)", "").strip()
+    found = re.search(r"\d+\.\d+\.\d+", inv.get("agent_version") or "")
+    version = found.group(0) if found else ""
+    name = AGENT_NAMES.get(agent.get("type", "claude_code"), agent.get("type", "?"))
     network = "internet limited to each question's allowed sites" if sb.get("network") == "allowlist" else "open internet"
     return (
         f"**Setup:** BioMysteryBench {(cfg.get('dataset') or {}).get('name', '?')} · "
-        f"{n_questions} questions × {n} trials each · Claude Code {version} (`{agent.get('model', '?')}`, "
+        f"{n_questions} questions × {n} trials each · {name} {version} (`{agent.get('model', '?')}`, "
         f"effort `{agent.get('effort', 'default')}`) · per trial: {round((sb.get('timeout_s') or 0) / 60)} min, "
         f"{sb.get('cpus', '?')} CPUs, {fmt_memory(sb.get('memory', '?'))} RAM, {network}, no web search · "
         f"graded by `{judge}` against the answer key; a trial scores 0 if it looked up the source dataset."
@@ -139,6 +144,6 @@ def _markdown(run_dir: Path, metrics: dict[str, Any], tasks: list[dict[str, Any]
     lines += ["", "**Columns:** accuracy = share of trials that were correct (each question weighs the same) · "
               f"pass@{k} = share of questions solved in at least one of the {k} trials · pass^{k} = share solved "
               f"in all {k} · answer agreement = share of trials giving the question's most common answer, right or "
-              "wrong · cost = Claude Code's API-price estimate per trial (not what a subscription is billed) · "
+              "wrong · cost = API-price estimate per trial (not what a subscription is billed) · "
               "timed out = hit the time limit (the agent then got one turn to give its best answer)."]
     return "\n".join(lines) + "\n"
