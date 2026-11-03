@@ -1,4 +1,4 @@
-# Egress proxy: one per trial. The agent container sits on an internal Docker
+# Egress proxy: one per attempt. The agent container sits on an internal Docker
 # network whose only way out is this squid, which admits the problem's
 # allowed_domains (plus the agent's own API endpoint) and logs every request.
 FROM debian:bookworm-slim

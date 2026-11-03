@@ -66,7 +66,7 @@ class CodexAgent(Agent):
             "-c", f'model_providers.{PROVIDER}.wire_api="responses"',
             *c.extra_args,
         ]
-        # Each trial has a fresh CODEX_HOME, so the latest session is this trial's.
+        # Each attempt has a fresh CODEX_HOME, so the latest session is this attempt's.
         argv += ["--last", "-"] if resume else ["-"]
         return argv
 

@@ -1,12 +1,12 @@
 # Claude Code (unchanged) on the 5-problem BioMysteryBench preview.
 # Every field not listed here takes its default from bmbench/config.py.
-run_name: preview-data_claude-code_opus-5-5_high
-n_trials: 5           # same as the BioMysteryBench post
+# The run folder is named from the settings (see auto_run_name in bmbench/config.py).
+n_attempts: 3           # attempts per problem
 concurrency: 2        # 2 × (4 CPUs, 3.5 GB) fits Docker Desktop's 8 CPUs / 7.6 GB
 
 dataset:
   name: preview
-  delete_after_task: true   # each question's data is downloaded before its trials, deleted after
+  delete_after_problem: true   # each problem's data is downloaded before its attempts, deleted after
 
 agent:
   type: claude_code
@@ -20,11 +20,11 @@ agent:
 sandbox:
   cpus: 4
   memory: 3.5g
-  timeout_s: 3600     # 1 h wall clock per trial
+  timeout_s: 3600     # 1 h wall clock per attempt
   network: allowlist
-  keep_workspace: false   # delete each trial's workspace (workspace_files.tsv lists it)
+  keep_workspace: false   # delete each attempt's workspace (workspace_files.tsv lists it)
 
 grader:
   auto: true
-  model: gpt-6-sol    # via the LiteLLM proxy in LITELLM_BASE_URL (.env)
+  model: claude-opus-5-5   # claude -p on the Claude subscription
   effort: medium

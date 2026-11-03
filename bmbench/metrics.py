@@ -1,8 +1,8 @@
-"""Accuracy and consistency over repeated trials.
+"""Accuracy and consistency over repeated attempts.
 
-Input: one record per graded trial with at least task_id, human_solvable, score,
-and normalized_answer. Tasks are weighted equally (mean of per-task means), so a
-task with a missing trial does not count for less.
+Input: one record per graded attempt with at least problem_id, human_solvable, score,
+and normalized_answer. Problems are weighted equally (mean of per-problem means), so a
+problem with a missing attempt does not count for less.
 """
 
 from __future__ import annotations
@@ -42,19 +42,19 @@ def _mean(xs: list[float | None]) -> float | None:
     return sum(ys) / len(ys) if ys else None
 
 
-def per_task(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_task: dict[str, list[dict[str, Any]]] = defaultdict(list)
+def per_problem(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_problem: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in records:
-        by_task[r["task_id"]].append(r)
+        by_problem[r["problem_id"]].append(r)
     rows = []
-    for task_id, rs in sorted(by_task.items()):
-        rs = sorted(rs, key=lambda r: r.get("trial", 0))
+    for problem_id, rs in sorted(by_problem.items()):
+        rs = sorted(rs, key=lambda r: r.get("attempt", 0))
         n = len(rs)
         scores = [float(r.get("score") or 0.0) for r in rs]
         c = int(sum(scores))
         counts = Counter(answer_key(r.get("normalized_answer") or r.get("answer")) for r in rs)
         rows.append({
-            "task_id": task_id,
+            "problem_id": problem_id,
             "human_solvable": rs[0].get("human_solvable", ""),
             "n": n,
             "correct": c,
@@ -71,30 +71,30 @@ def per_task(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
-    """The key metrics. `k` is the number of trials per question (the smallest, if
-    a question is missing some)."""
-    tasks = per_task(records)
-    if not tasks:
-        return {"n_tasks": 0, "n_trials": 0}
-    k = min(t["n"] for t in tasks)
-    hist = Counter(f"{t['correct']}/{t['n']}" for t in tasks)
+    """The key metrics. `k` is the number of attempts per problem (the smallest, if
+    a problem is missing some)."""
+    problems = per_problem(records)
+    if not problems:
+        return {"n_problems": 0, "n_attempts": 0}
+    k = min(t["n"] for t in problems)
+    hist = Counter(f"{t['correct']}/{t['n']}" for t in problems)
     return {
-        "n_tasks": len(tasks),
-        "n_trials": len(records),
+        "n_problems": len(problems),
+        "n_attempts": len(records),
         "k": k,
         # accuracy
-        "accuracy": _mean([t["accuracy"] for t in tasks]),
-        "pass_at_k": _mean([pass_at_k(t["n"], t["correct"], k) for t in tasks]),
+        "accuracy": _mean([t["accuracy"] for t in problems]),
+        "pass_at_k": _mean([pass_at_k(t["n"], t["correct"], k) for t in problems]),
         # consistency
-        "pass_hat_k": _mean([pass_hat_k(t["n"], t["correct"], k) for t in tasks]),
-        "answer_agreement": _mean([t["answer_agreement"] for t in tasks]),
+        "pass_hat_k": _mean([pass_hat_k(t["n"], t["correct"], k) for t in problems]),
+        "answer_agreement": _mean([t["answer_agreement"] for t in problems]),
         "solve_histogram": dict(sorted(hist.items(), key=lambda kv: -int(kv[0].split("/")[0]))),
-        # cost and time per trial
+        # cost and time per attempt
         "cost_usd_mean": _mean([r.get("cost_usd") or 0.0 for r in records]),
         "minutes_mean": _mean([(r.get("agent_seconds") or 0) / 60 for r in records]),
-        # context, not metrics: counts of trials
-        "timed_out": sum(t["timed_out"] for t in tasks),
-        "cheated": sum(t["cheated"] for t in tasks),
+        # context, not metrics: counts of attempts
+        "timed_out": sum(t["timed_out"] for t in problems),
+        "cheated": sum(t["cheated"] for t in problems),
     }
 
 

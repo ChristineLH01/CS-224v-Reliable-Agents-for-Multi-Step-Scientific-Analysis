@@ -41,7 +41,7 @@ class Agent(ABC):
     #: short identifier used in run names and reports
     name: str = ""
     #: directories inside the sandbox holding the agent's own session records,
-    #: copied into the trial directory after the run
+    #: copied into the attempt directory after the run
     session_dirs: tuple[str, ...] = ()
     #: host environment variables holding this agent's credentials, passed into the
     #: sandbox by name only (never another agent's)

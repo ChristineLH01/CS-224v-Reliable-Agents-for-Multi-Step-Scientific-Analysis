@@ -1,5 +1,5 @@
-# Sandbox image: one container per trial. The agent CLI runs *inside* it, so every
-# command the agent issues sees only this filesystem plus the trial's /workspace mount.
+# Sandbox image: one container per attempt. The agent CLI runs *inside* it, so every
+# command the agent issues sees only this filesystem plus the attempt's /workspace mount.
 ARG BASE_IMAGE=condaforge/miniforge3:26.7.2-0
 FROM ${BASE_IMAGE}
 

@@ -2,7 +2,7 @@
 
 Every field has a default, so a config file only states what differs. Unknown keys
 are an error rather than silently ignored: a typo in `timeout_s` must not quietly
-run every trial with the default limit.
+run every attempt with the default limit.
 """
 
 from __future__ import annotations
@@ -19,20 +19,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: Auth variables forwarded (by name, never by value on a command line) into the sandbox.
 SECRET_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
-#: The OpenAI-compatible LiteLLM proxy: the judge calls it from the host, and the
-#: Codex agent uses it as its model provider (the key is passed into Codex sandboxes only).
+#: The OpenAI-compatible LiteLLM proxy: the Codex agent's model provider (the key is passed
+#: into Codex sandboxes only), and the judge's route for non-Claude judge models.
 LITELLM_URL_ENV, LITELLM_KEY_ENV = "LITELLM_BASE_URL", "LITELLM_API_KEY"
 
 
 @dataclass
 class DatasetConfig:
     name: str = "preview"  # preview | full
-    root: str = "data"  # data/<name>/{meta,tasks}
-    task_ids: list[str] | None = None  # None = every problem in problems.csv
+    root: str = "data"  # data/<name>/{meta,problems}
+    problem_ids: list[str] | None = None  # None = every problem in problems.csv
     human_solvable: str | None = None  # "yes" | "no" | None (both)
-    # A question's data is downloaded when its first trial starts and, with this on,
-    # deleted again once all its trials have finished.
-    delete_after_task: bool = True
+    # A problem's data is downloaded when its first attempt starts and, with this on,
+    # deleted again once all its attempts have finished.
+    delete_after_problem: bool = True
 
 
 @dataclass
@@ -72,11 +72,11 @@ class SandboxConfig:
     extra_allowed_domains: list[str] = field(default_factory=list)
     # Replace the problem's allowed_domains entirely (e.g. [] for an offline ablation).
     override_allowed_domains: list[str] | None = None
-    # copy: clone the task data into each trial's workspace (copy-on-write where the
+    # copy: clone the problem's data into each attempt's workspace (copy-on-write where the
     # filesystem allows). readonly: bind-mount the prepared data read-only instead.
     input_mode: str = "copy"
     # The workspace (inputs, downloads, intermediate files) is deleted after each
-    # trial; workspace_files.tsv keeps the list of files. The trajectory already
+    # attempt; workspace_files.tsv keeps the list of files. The trajectory already
     # holds every command and every output the agent saw.
     keep_workspace: bool = False
     keep_input_data: bool = False  # with keep_workspace: keep the cloned inputs too
@@ -84,11 +84,13 @@ class SandboxConfig:
 
 @dataclass
 class GraderConfig:
-    auto: bool = True  # grade each trial as soon as it finishes
-    model: str = "gpt-6-sol"  # served by the LiteLLM proxy in LITELLM_BASE_URL
-    effort: str | None = "medium"  # sent as reasoning_effort; None = the model's default
-    # (input, output) USD per million tokens, for the cost estimate when the proxy
-    # does not report one
+    auto: bool = True  # grade each attempt as soon as it finishes
+    # claude-* runs as `claude -p` on the Claude subscription; any other model goes
+    # through the LiteLLM proxy in LITELLM_BASE_URL (e.g. gpt-6.1-sol)
+    model: str = "claude-opus-5-5"
+    effort: str | None = "medium"
+    # LiteLLM only: (input, output) USD per million tokens, for the cost estimate
+    # when the proxy does not report one
     usd_per_mtok: list[float] = field(default_factory=lambda: [2.0, 10.0])
     timeout_s: int = 600
     max_action_log_chars: int = 150_000
@@ -97,15 +99,19 @@ class GraderConfig:
 
 @dataclass
 class RunConfig:
-    run_name: str = "preview-data_claude-code_opus-5-5_high"
+    run_name: str | None = None  # None: built from the settings, see auto_run_name()
     runs_dir: str = "runs"
-    n_trials: int = 5
+    n_attempts: int = 3  # attempts per problem
     concurrency: int = 1
-    prompt_template: str = "prompts/task.md"
+    prompt_template: str = "prompts/problem.md"
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
     grader: GraderConfig = field(default_factory=GraderConfig)
+
+    def __post_init__(self) -> None:
+        if not self.run_name:
+            self.run_name = auto_run_name(self)
 
     @property
     def run_dir(self) -> Path:
@@ -113,6 +119,18 @@ class RunConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
+
+
+def auto_run_name(cfg: RunConfig) -> str:
+    """<dataset>_<agent>_<model>_<effort>_timeout-<limit>_<n>-attempts, e.g.
+    preview_claude-code_opus-5-5_high_timeout-1h_3-attempts: a change to any of these
+    settings starts a new run folder instead of mixing into an old one."""
+    a, t = cfg.agent, cfg.sandbox.timeout_s
+    limit = f"{t // 3600}h" if t % 3600 == 0 else f"{round(t / 60)}min"
+    attempts = f"{cfg.n_attempts}-attempt" + ("" if cfg.n_attempts == 1 else "s")
+    model = a.model.removeprefix("claude-").replace(".", "-")
+    return "_".join([cfg.dataset.name, a.type.replace("_", "-"), model, a.effort or "default",
+                     f"timeout-{limit}", attempts])
 
 
 def resolve(path: str | Path) -> Path:
@@ -145,7 +163,7 @@ _SECTIONS = {
 
 
 def apply_overrides(data: dict[str, Any], overrides: list[str]) -> dict[str, Any]:
-    """`agent.effort=high`, `n_trials=3`, `dataset.task_ids=[hb035,hb020]` (YAML values)."""
+    """`agent.effort=high`, `n_attempts=3`, `dataset.problem_ids=[hb035,hb020]` (YAML values)."""
     for item in overrides:
         if "=" not in item:
             raise ValueError(f"override must look like key=value, got {item!r}")

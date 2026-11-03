@@ -4,10 +4,10 @@ Layout under `data/<dataset>/`:
 
     meta/problems.csv      id, question, answer_rubric, allowed_domains, human_solvable
     meta/README.md, meta/CHANGELOG.md
-    tasks/<id>/...         that problem's data files, as the agent will see them
+    problems/<id>/...      that problem's data files, as the agent will see them
 
 `meta/` holds the answer rubrics. Nothing under it is ever mounted into a sandbox:
-the runner hands an agent `Problem.public()`, and only `tasks/<id>/` is mounted.
+the runner hands an agent `Problem.public()`, and only `problems/<id>/` is mounted.
 """
 
 from __future__ import annotations
@@ -54,8 +54,8 @@ def dataset_dir(name: str, root: str | Path = "data") -> Path:
     return resolve(root) / name
 
 
-def task_data_dir(name: str, task_id: str, root: str | Path = "data") -> Path:
-    return dataset_dir(name, root) / "tasks" / task_id
+def problem_data_dir(name: str, problem_id: str, root: str | Path = "data") -> Path:
+    return dataset_dir(name, root) / "problems" / problem_id
 
 
 def parse_domains(raw: str) -> tuple[str, ...]:
@@ -98,7 +98,7 @@ def select_problems(
         by_id = {p.id: p for p in problems}
         missing = [i for i in ids if i not in by_id]
         if missing:
-            raise KeyError(f"unknown task id(s): {', '.join(missing)}")
+            raise KeyError(f"unknown problem id(s): {', '.join(missing)}")
         problems = [by_id[i] for i in ids]
     if human_solvable:
         problems = [p for p in problems if p.human_solvable == human_solvable.lower()]
@@ -135,13 +135,13 @@ def safe_extract(zip_path: Path, dest: Path, only_top: set[str] | None = None) -
     return sorted(tops)
 
 
-def _flatten_single_dir(task_dir: Path) -> None:
-    """`tasks/<id>/<id>/files` -> `tasks/<id>/files` when a zip wraps its files."""
-    entries = [e for e in task_dir.iterdir() if e.name != PREPARED_MARKER]
+def _flatten_single_dir(problem_dir: Path) -> None:
+    """`problems/<id>/<id>/files` -> `problems/<id>/files` when a zip wraps its files."""
+    entries = [e for e in problem_dir.iterdir() if e.name != PREPARED_MARKER]
     if len(entries) == 1 and entries[0].is_dir():
         inner = entries[0]
         for child in inner.iterdir():
-            shutil.move(str(child), task_dir / child.name)
+            shutil.move(str(child), problem_dir / child.name)
         inner.rmdir()
 
 
@@ -161,10 +161,10 @@ def _hf_download(repo: str, filename: str, local_dir: Path, token: str | None) -
 
 def _dirs(name: str, root: str | Path) -> tuple[Path, Path, Path]:
     base = dataset_dir(name, root)
-    meta, tasks, dl = base / "meta", base / "tasks", base / "_download"
-    for d in (meta, tasks, dl):
+    meta, pdir, dl = base / "meta", base / "problems", base / "_download"
+    for d in (meta, pdir, dl):
         d.mkdir(parents=True, exist_ok=True)
-    return meta, tasks, dl
+    return meta, pdir, dl
 
 
 def prepare(
@@ -175,15 +175,15 @@ def prepare(
     force: bool = False,
     keep_zips: bool = False,
 ) -> list[str]:
-    """Download problems + data for `name` and extract each task. Returns prepared ids."""
+    """Download problems + data for `name` and extract each problem's data. Returns prepared ids."""
     prepare_meta(name, root, token)
-    return prepare_tasks(name, root, ids, token, force=force, keep_zips=keep_zips)
+    return prepare_problems(name, root, ids, token, force=force, keep_zips=keep_zips)
 
 
 def prepare_meta(name: str, root: str | Path = "data", token: str | None = None) -> None:
     """problems.csv (questions, rubrics, allowed domains) plus the dataset's README."""
     repo = REPOS[name]
-    meta, _tasks, dl = _dirs(name, root)
+    meta, _pdir, dl = _dirs(name, root)
     token = token or os.environ.get("HF_TOKEN") or None
     for fn in META_FILES:
         try:
@@ -199,7 +199,7 @@ def prepare_meta(name: str, root: str | Path = "data", token: str | None = None)
             print(f"  note: {fn} not downloaded ({e})")
 
 
-def prepare_tasks(
+def prepare_problems(
     name: str,
     root: str | Path = "data",
     ids: list[str] | None = None,
@@ -207,36 +207,36 @@ def prepare_tasks(
     force: bool = False,
     keep_zips: bool = False,
 ) -> list[str]:
-    """Download and extract each task's data (the full set: one zip per task)."""
+    """Download and extract each problem's data (the full set: one zip per problem)."""
     from huggingface_hub.errors import EntryNotFoundError, RemoteEntryNotFoundError  # noqa: PLC0415
 
     repo = REPOS[name]
-    _meta, tasks, dl = _dirs(name, root)
+    _meta, pdir, dl = _dirs(name, root)
     token = token or os.environ.get("HF_TOKEN") or None
     problems = load_problems(name, root)
     wanted = ids or [p.id for p in problems]
-    todo = [i for i in wanted if force or not (tasks / i / PREPARED_MARKER).exists()]
+    todo = [i for i in wanted if force or not (pdir / i / PREPARED_MARKER).exists()]
     if not todo:
-        print(f"{name}: all {len(wanted)} requested tasks already prepared")
+        print(f"{name}: all {len(wanted)} requested problems already prepared")
         return wanted
 
     if name == "preview":
         archive = _hf_download(repo, "data.zip", dl, token)
         for i in todo:
-            if (tasks / i).exists():
-                shutil.rmtree(tasks / i)
-        safe_extract(archive, tasks, only_top=set(todo))
+            if (pdir / i).exists():
+                shutil.rmtree(pdir / i)
+        safe_extract(archive, pdir, only_top=set(todo))
         for i in todo:
-            if not (tasks / i).is_dir():
+            if not (pdir / i).is_dir():
                 print(f"  warning: {i} has no data in data.zip")
-                (tasks / i).mkdir(parents=True, exist_ok=True)
-            (tasks / i / PREPARED_MARKER).touch()
+                (pdir / i).mkdir(parents=True, exist_ok=True)
+            (pdir / i / PREPARED_MARKER).touch()
             print(f"  prepared {i}")
         if not keep_zips:
             archive.unlink(missing_ok=True)
     else:
         for i in todo:
-            target = tasks / i
+            target = pdir / i
             if target.exists():
                 shutil.rmtree(target)
             target.mkdir(parents=True)

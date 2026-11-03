@@ -1,13 +1,13 @@
 # Codex (unchanged) on the 5-problem BioMysteryBench preview, under the same
 # sandbox, prompt, limits and judge as configs/claude_code_preview.yaml.
 # The model is reached through the LiteLLM proxy in LITELLM_BASE_URL (.env).
-run_name: preview-data_codex_gpt-6-1-sol_high
-n_trials: 5
+# The run folder is named from the settings (see auto_run_name in bmbench/config.py).
+n_attempts: 3           # attempts per problem
 concurrency: 2
 
 dataset:
   name: preview
-  delete_after_task: true
+  delete_after_problem: true
 
 agent:
   type: codex
@@ -21,11 +21,11 @@ agent:
 sandbox:
   cpus: 4
   memory: 3.5g
-  timeout_s: 3600     # 1 h wall clock per trial
+  timeout_s: 3600     # 1 h wall clock per attempt
   network: allowlist
   keep_workspace: false
 
 grader:
   auto: true
-  model: gpt-6-sol
+  model: claude-opus-5-5   # claude -p on the Claude subscription
   effort: medium

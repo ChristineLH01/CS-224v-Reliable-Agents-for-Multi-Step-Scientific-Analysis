@@ -1,4 +1,4 @@
-"""bmbench: prepare | tasks | build | doctor | run | grade | report | show | clean"""
+"""bmbench: prepare | problems | build | doctor | run | grade | report | show | clean"""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from bmbench.config import REPO_ROOT, load_config, load_dotenv, resolve
+from bmbench.config import REPO_ROOT, SECRET_ENV, load_config, load_dotenv, resolve
 from bmbench.dataset import PREPARED_MARKER, dataset_dir, dir_size, load_problems, prepare, select_problems
 
 
@@ -24,12 +24,12 @@ def _ids(text: str | None) -> list[str] | None:
 
 def cmd_prepare(a: argparse.Namespace) -> None:
     ids = prepare(a.dataset, a.root, ids=_ids(a.ids), force=a.force, keep_zips=a.keep_zips)
-    print(f"ready: {len(ids)} task(s) under {dataset_dir(a.dataset, a.root) / 'tasks'}")
+    print(f"ready: {len(ids)} problem(s) under {dataset_dir(a.dataset, a.root) / 'problems'}")
 
 
-def cmd_tasks(a: argparse.Namespace) -> None:
+def cmd_problems(a: argparse.Namespace) -> None:
     problems = load_problems(a.dataset, a.root)
-    base = dataset_dir(a.dataset, a.root) / "tasks"
+    base = dataset_dir(a.dataset, a.root) / "problems"
     print(f"{'id':22s} {'solvable':8s} {'data':>9s}  question")
     for p in select_problems(problems, None, a.human_solvable):
         d = base / p.id
@@ -75,7 +75,7 @@ def cmd_build(a: argparse.Namespace) -> None:
 
 async def _doctor(a: argparse.Namespace) -> int:
     from bmbench.agents.base import make_agent  # noqa: PLC0415
-    from bmbench.grader import ANSWER_SCHEMA, judge, judge_endpoint  # noqa: PLC0415
+    from bmbench.grader import ANSWER_SCHEMA, judge, judge_endpoint, uses_claude  # noqa: PLC0415
     from bmbench.sandbox import DockerSandbox, docker_ok, image_info, run_cmd  # noqa: PLC0415
     from bmbench.trajectory import Segment  # noqa: PLC0415
 
@@ -103,30 +103,37 @@ async def _doctor(a: argparse.Namespace) -> int:
            ", ".join(auth) or f"set one of {', '.join(agent.secret_env)}")
     try:
         problems = load_problems(cfg.dataset.name, cfg.dataset.root)
-        base = dataset_dir(cfg.dataset.name, cfg.dataset.root) / "tasks"
+        base = dataset_dir(cfg.dataset.name, cfg.dataset.root) / "problems"
         ready = [p.id for p in problems if (base / p.id / PREPARED_MARKER).exists()]
-        rest = "" if len(ready) == len(problems) else " (the rest downloads during the run, one question at a time)"
+        rest = "" if len(ready) == len(problems) else " (the rest downloads during the run, one problem at a time)"
         report(True, f"dataset {cfg.dataset.name}", f"{len(problems)} problems; data on disk for {len(ready)}{rest}")
     except FileNotFoundError:
         report(True, f"dataset {cfg.dataset.name}", "not downloaded yet; `run` fetches it")
     if cfg.dataset.name == "full":
         report(bool(os.environ.get("HF_TOKEN")), "HF_TOKEN for the gated full set", "" if os.environ.get("HF_TOKEN") else "missing")
-    try:
-        url, _key = judge_endpoint()
-        report(True, f"judge endpoint ({cfg.grader.model})", url)
-    except RuntimeError as e:
-        report(False, "judge endpoint", str(e))
+    judge_ok = True
+    if uses_claude(cfg.grader):
+        claude_auth = [k for k in SECRET_ENV if os.environ.get(k)]
+        judge_ok = bool(claude_auth)
+        report(judge_ok, f"judge {cfg.grader.model} via claude -p (Claude subscription)",
+               ", ".join(claude_auth) or f"set one of {', '.join(SECRET_ENV)}")
     else:
-        if a.auth_check:
-            prompt = ("Grading test. Expected answer: CTCF. Submitted answer: ctcf. Decide whether the "
-                      "submission is correct; keep the rationale to one sentence.")
-            try:
-                res = await judge(prompt, ANSWER_SCHEMA, cfg.grader, retries=0)
-                v = res["verdict"]
-                report(v.get("correct") is True, f"judge {cfg.grader.model} answers in the schema",
-                       f"correct={v.get('correct')}, ${res['cost_usd']:.4f}")
-            except RuntimeError as e:
-                report(False, f"judge {cfg.grader.model}", str(e)[:400])
+        try:
+            url, _key = judge_endpoint()
+            report(True, f"judge {cfg.grader.model} via LiteLLM", url)
+        except RuntimeError as e:
+            judge_ok = False
+            report(False, "judge endpoint", str(e))
+    if judge_ok and a.auth_check:
+        prompt = ("Grading test. Expected answer: CTCF. Submitted answer: ctcf. Decide whether the "
+                  "submission is correct; keep the rationale to one sentence.")
+        try:
+            res = await judge(prompt, ANSWER_SCHEMA, cfg.grader, cfg.sandbox.image, retries=0)
+            v = res["verdict"]
+            report(v.get("correct") is True, f"judge {cfg.grader.model} answers in the schema",
+                   f"correct={v.get('correct')}, ${res['cost_usd']:.4f}")
+        except RuntimeError as e:
+            report(False, f"judge {cfg.grader.model}", str(e)[:400])
 
     if cfg.sandbox.network == "allowlist":
         with tempfile.TemporaryDirectory(prefix="bmb-doctor-") as tmp:
@@ -159,7 +166,7 @@ async def _doctor(a: argparse.Namespace) -> int:
                     if not auth:
                         report(False, f"{agent.name} auth through the sandbox", "no credentials configured")
                     else:
-                        # the real agent invocation, with a one-word task
+                        # the real agent invocation, with a one-word prompt
                         tmp_prompt = Path(tmp) / "p.txt"
                         tmp_prompt.write_text("Reply with exactly: OK", encoding="utf-8")
                         out_path, err_path = Path(tmp) / "o.jsonl", Path(tmp) / "e.txt"
@@ -184,10 +191,10 @@ def cmd_run(a: argparse.Namespace) -> None:
     from bmbench.runner import RunAborted, run  # noqa: PLC0415
 
     overrides = list(a.set or [])
-    if a.tasks:
-        overrides.append(f"dataset.task_ids=[{a.tasks}]")
-    if a.trials:
-        overrides.append(f"n_trials={a.trials}")
+    if a.problems:
+        overrides.append(f"dataset.problem_ids=[{a.problems}]")
+    if a.attempts:
+        overrides.append(f"n_attempts={a.attempts}")
     if a.run_name:
         overrides.append(f"run_name={a.run_name}")
     if a.concurrency:
@@ -198,7 +205,7 @@ def cmd_run(a: argparse.Namespace) -> None:
     except RunAborted as e:
         sys.exit(f"\nrun aborted: {e}")
     except KeyboardInterrupt:
-        sys.exit("\ninterrupted; re-run the same command to resume (finished trials are kept)")
+        sys.exit("\ninterrupted; re-run the same command to resume (finished attempts are kept)")
     print(f"\nreport: {run_dir / 'report.md'}")
 
 
@@ -207,7 +214,7 @@ def cmd_grade(a: argparse.Namespace) -> None:
     from bmbench.runner import grade_run  # noqa: PLC0415
 
     run_dir = resolve(a.run)
-    asyncio.run(grade_run(run_dir, force=a.regrade, tasks=_ids(a.tasks), concurrency=a.concurrency,
+    asyncio.run(grade_run(run_dir, force=a.regrade, problems=_ids(a.problems), concurrency=a.concurrency,
                           overrides=a.set))
     write_report(run_dir)
     print(f"report: {run_dir / 'report.md'}")
@@ -222,21 +229,21 @@ def cmd_report(a: argparse.Namespace) -> None:
 
 
 def cmd_show(a: argparse.Namespace) -> None:
-    tdir = resolve(a.run) / "trials" / a.task / f"r{a.trial}"
-    if not tdir.is_dir():
-        sys.exit(f"no such trial: {tdir}")
+    adir = resolve(a.run) / "problems" / a.problem / f"attempt-{a.attempt}"
+    if not adir.is_dir():
+        sys.exit(f"no such attempt: {adir}")
     if a.full:
-        print((tdir / "transcript.md").read_text(encoding="utf-8"))
+        print((adir / "transcript.md").read_text(encoding="utf-8"))
         return
-    result = json.loads((tdir / "result.json").read_text(encoding="utf-8"))
-    grade = json.loads((tdir / "grade.json").read_text(encoding="utf-8")) if (tdir / "grade.json").is_file() else {}
+    result = json.loads((adir / "result.json").read_text(encoding="utf-8"))
+    grade = json.loads((adir / "grade.json").read_text(encoding="utf-8")) if (adir / "grade.json").is_file() else {}
     for k in ("status", "answer", "cost_usd", "num_turns", "agent_seconds", "timed_out",
               "finalized_after_timeout", "nudges", "tool_counts"):
         print(f"{k:24s} {result.get(k)}")
     for k in ("score", "correct", "cheated", "normalized_answer", "answer_rationale", "cheat_evidence"):
         if k in grade:
             print(f"{k:24s} {grade.get(k)}")
-    print(f"\ntranscript: {tdir / 'transcript.md'}  (use --full to print it)")
+    print(f"\ntranscript: {adir / 'transcript.md'}  (use --full to print it)")
 
 
 def cmd_clean(_a: argparse.Namespace) -> None:
@@ -247,7 +254,7 @@ def cmd_clean(_a: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    # Progress lines must appear as trials finish, also when stdout is a file or pipe.
+    # Progress lines must appear as attempts finish, also when stdout is a file or pipe.
     sys.stdout.reconfigure(line_buffering=True)
     load_dotenv()
     p = argparse.ArgumentParser(prog="bmbench", description=__doc__)
@@ -261,16 +268,16 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("prepare", help="download + extract a dataset")
     sp.add_argument("--dataset", choices=["preview", "full"], default="preview")
     sp.add_argument("--root", default="data")
-    sp.add_argument("--ids", help="comma-separated task ids (default: all)")
-    sp.add_argument("--force", action="store_true", help="re-extract tasks already prepared")
+    sp.add_argument("--ids", help="comma-separated problem ids (default: all)")
+    sp.add_argument("--force", action="store_true", help="re-extract problems already prepared")
     sp.add_argument("--keep-zips", action="store_true")
     sp.set_defaults(fn=cmd_prepare)
 
-    sp = sub.add_parser("tasks", help="list problems (never prints the rubric)")
+    sp = sub.add_parser("problems", help="list problems (never prints the rubric)")
     sp.add_argument("--dataset", choices=["preview", "full"], default="preview")
     sp.add_argument("--root", default="data")
     sp.add_argument("--human-solvable", choices=["yes", "no"])
-    sp.set_defaults(fn=cmd_tasks)
+    sp.set_defaults(fn=cmd_problems)
 
     sp = sub.add_parser("build", help="build the sandbox and proxy images")
     with_config(sp)
@@ -287,20 +294,20 @@ def main(argv: list[str] | None = None) -> None:
                          "(costs a few tokens)")
     sp.set_defaults(fn=cmd_doctor)
 
-    sp = sub.add_parser("run", help="run trials (resumable)")
+    sp = sub.add_parser("run", help="run attempts (resumable)")
     with_config(sp)
-    sp.add_argument("--tasks", help="comma-separated task ids")
-    sp.add_argument("--trials", type=int, help="trials per task")
+    sp.add_argument("--problems", help="comma-separated problem ids")
+    sp.add_argument("--attempts", type=int, help="attempts per problem")
     sp.add_argument("--run-name")
     sp.add_argument("--concurrency", type=int)
-    sp.add_argument("--force", action="store_true", help="redo finished trials")
+    sp.add_argument("--force", action="store_true", help="redo finished attempts")
     sp.add_argument("--no-grade", action="store_true", help="skip automatic grading")
     sp.set_defaults(fn=cmd_run)
 
-    sp = sub.add_parser("grade", help="grade (or re-grade) a run's trials")
+    sp = sub.add_parser("grade", help="grade (or re-grade) a run's attempts")
     sp.add_argument("-r", "--run", required=True, help="run directory, e.g. runs/<run_name>")
     sp.add_argument("--regrade", action="store_true")
-    sp.add_argument("--tasks")
+    sp.add_argument("--problems")
     sp.add_argument("--concurrency", type=int, default=2)
     sp.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="override the run's saved config, e.g. --set grader.model=gpt-6-sol")
@@ -310,10 +317,10 @@ def main(argv: list[str] | None = None) -> None:
     sp.add_argument("-r", "--run", required=True)
     sp.set_defaults(fn=cmd_report)
 
-    sp = sub.add_parser("show", help="summarize one trial")
+    sp = sub.add_parser("show", help="summarize one attempt")
     sp.add_argument("-r", "--run", required=True)
-    sp.add_argument("task")
-    sp.add_argument("trial", type=int)
+    sp.add_argument("problem")
+    sp.add_argument("attempt", type=int)
     sp.add_argument("--full", action="store_true", help="print the whole transcript")
     sp.set_defaults(fn=cmd_show)
 

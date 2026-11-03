@@ -120,7 +120,7 @@ def test_codex_config_loads():
     cfg = load_config("configs/codex_preview.yaml")
     agent = make_agent(cfg.agent)
     assert isinstance(agent, CodexAgent) and cfg.agent.model == "gpt-6.1-sol" and cfg.agent.effort == "high"
-    assert cfg.sandbox.timeout_s == 3600 and cfg.grader.model == "gpt-6-sol"
+    assert cfg.sandbox.timeout_s == 3600 and cfg.n_attempts == 3 and cfg.grader.model == "claude-opus-5-5"
 
 
 def test_subagent_commands_come_from_rollouts(tmp_path):

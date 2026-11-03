@@ -1,9 +1,9 @@
-"""Run every (task, repeat) trial: workspace → sandbox → agent → artifacts → grade.
+"""Run every (problem, repeat) attempt: workspace → sandbox → agent → artifacts → grade.
 
-A trial directory is the unit of resumption: `result.json` with a terminal status
-means done, and re-running the same config skips it. Questions run one after
-another (all repeats of one question, then the next), so each question's data is
-on disk only while its trials need it.
+An attempt directory is the unit of resumption: `result.json` with a terminal status
+means done, and re-running the same config skips it. Problems run one after
+another (all attempts at one problem, then the next), so each problem's data is
+on disk only while its attempts need it.
 """
 
 from __future__ import annotations
@@ -36,15 +36,15 @@ from bmbench.dataset import (
     list_input_files,
     load_problems,
     prepare_meta,
-    prepare_tasks,
+    prepare_problems,
     select_problems,
-    task_data_dir,
+    problem_data_dir,
 )
-from bmbench.grader import grade_trial, render
+from bmbench.grader import grade_attempt, render
 from bmbench.sandbox import DATA_DIR, WORKDIR, DockerSandbox, image_info, run_cmd, sanitize_name
 from bmbench.trajectory import Segment, final_answer, render_transcript, tool_counts
 
-#: statuses that count as a finished trial (re-runs skip them)
+#: statuses that count as a finished attempt (re-runs skip them)
 TERMINAL = {"completed", "no_answer", "timeout", "agent_error"}
 #: statuses that stop the whole run: nothing after them can succeed
 FATAL = {"auth_error", "rate_limited"}
@@ -54,12 +54,35 @@ class RunAborted(RuntimeError):
     pass
 
 
+class PromptChanged(RuntimeError):
+    pass
+
+
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
-def trial_dir(run_dir: Path, task_id: str, trial: int) -> Path:
-    return run_dir / "trials" / task_id / f"r{trial}"
+def attempt_dir(run_dir: Path, problem_id: str, attempt: int) -> Path:
+    return run_dir / "problems" / problem_id / f"attempt-{attempt}"
+
+
+def problem_prompt(problem_dir: Path, prompt: str) -> Path:
+    """One prompt file per problem, shared by all its attempts: the question, its data
+    and the run's settings are the same for every attempt. A different prompt for a
+    later attempt means the settings changed under the same run name."""
+    problem_dir.mkdir(parents=True, exist_ok=True)
+    path = problem_dir / "prompt.md"
+    try:
+        with open(path, "x", encoding="utf-8") as f:
+            f.write(prompt)
+    except FileExistsError:
+        if path.read_text(encoding="utf-8") != prompt:
+            raise PromptChanged(
+                f"{path} differs from the prompt this run would send now: a setting it states "
+                "(time limit, CPUs, memory, allowed domains) or prompts/problem.md changed since the earlier "
+                "attempts. Use a new --run-name, or restore the settings."
+            ) from None
+    return path
 
 
 def effective_domains(problem: Problem, cfg: RunConfig,
@@ -81,7 +104,7 @@ def fmt_memory(mem: str) -> str:
     return str(mem)
 
 
-def render_task_prompt(problem: Problem, cfg: RunConfig, n_files: int) -> str:
+def render_problem_prompt(problem: Problem, cfg: RunConfig, n_files: int) -> str:
     told, _ = effective_domains(problem, cfg)
     template = resolve(cfg.prompt_template).read_text(encoding="utf-8")
     cpus = cfg.sandbox.cpus
@@ -126,7 +149,7 @@ def rmtree(path: Path) -> None:
 
 
 def remove_workspace(workspace: Path, listing: Path) -> None:
-    """Record every file the trial left behind (path, bytes), then delete them all."""
+    """Record every file the attempt left behind (path, bytes), then delete them all."""
     rows = []
     for dirpath, _dirs, files in os.walk(workspace):
         for fn in files:
@@ -174,7 +197,7 @@ def scrub_secrets(root: Path, secrets: list[str], max_bytes: int = 50 * 1024 * 1
 
 
 def classify(segments: list[Segment], answer: str | None) -> tuple[str, str]:
-    """(status, error kind) for a finished trial."""
+    """(status, error kind) for a finished attempt."""
     errors = "\n".join(s.error_text for s in segments if s.error_text)
     kind = classify_error(errors) or ""
     if answer:
@@ -190,27 +213,28 @@ def classify(segments: list[Segment], answer: str | None) -> tuple[str, str]:
     return "no_answer", kind
 
 
-async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
+async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: int,
                     run_dir: Path, *, force: bool = False) -> dict[str, Any]:
-    tdir = trial_dir(run_dir, problem.id, trial)
-    result_path = tdir / "result.json"
+    adir = attempt_dir(run_dir, problem.id, attempt)
+    result_path = adir / "result.json"
     if result_path.is_file() and not force:
         prior = json.loads(result_path.read_text(encoding="utf-8"))
         if prior.get("status") in TERMINAL:
             prior["_skipped"] = True
             return prior
-    if tdir.exists():
-        if run_dir.resolve() not in tdir.resolve().parents:
-            raise RuntimeError(f"refusing to delete {tdir}: outside the run directory")
-        rmtree(tdir)
-    tdir.mkdir(parents=True)
-
     sb = cfg.sandbox
-    src = task_data_dir(cfg.dataset.name, problem.id, cfg.dataset.root)
+    src = problem_data_dir(cfg.dataset.name, problem.id, cfg.dataset.root)
     if not (src / PREPARED_MARKER).exists():
         raise RuntimeError(f"data for {problem.id} is missing under {src}")
     inputs = list_input_files(src)
-    workspace = tdir / "workspace"
+    prompt_path = problem_prompt(adir.parent, render_problem_prompt(problem, cfg, len(inputs)))
+
+    if adir.exists():
+        if run_dir.resolve() not in adir.resolve().parents:
+            raise RuntimeError(f"refusing to delete {adir}: outside the run directory")
+        rmtree(adir)
+    adir.mkdir(parents=True)
+    workspace = adir / "workspace"
     workspace.mkdir()
     readonly = None
     if sb.input_mode == "copy":
@@ -221,8 +245,6 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
     else:
         raise ValueError(f"sandbox.input_mode must be 'copy' or 'readonly', not {sb.input_mode!r}")
 
-    prompt = render_task_prompt(problem, cfg, len(inputs))
-    (tdir / "prompt.md").write_text(prompt, encoding="utf-8")
     _, admitted = effective_domains(problem, cfg, agent.infra_domains)
     session_id = str(uuid.uuid4())
     started = now()
@@ -234,7 +256,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
     harness_error = ""
 
     box = DockerSandbox(
-        name=f"bmb-{sanitize_name(cfg.run_name)[:24]}-{problem.id[:20]}-r{trial}-{session_id[:6]}",
+        name=f"bmb-{sanitize_name(cfg.run_name)[:24]}-{problem.id[:20]}-a{attempt}-{session_id[:6]}",
         cfg=sb, workspace=workspace, allowed_domains=admitted, readonly_data=readonly,
         run_label=sanitize_name(cfg.run_name),
     )
@@ -245,7 +267,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
         if agent.cfg.max_budget_usd is not None:
             budget = max(0.0, agent.cfg.max_budget_usd - spent)
         argv = agent.command(timeout_s=int(timeout_s), session_id=session_id, resume=resume, budget_usd=budget)
-        out, err = tdir / f"stream.{kind}.jsonl", tdir / f"stderr.{kind}.log"
+        out, err = adir / f"stream.{kind}.jsonl", adir / f"stderr.{kind}.log"
         res = await box.exec(argv, stdin_path=stdin, stdout_path=out, stderr_path=err,
                              deadline_s=timeout_s + 120, env=agent.env(), secret_env=agent.secret_env)
         seg = Segment(kind=kind, exit_code=res.code, timed_out=res.timed_out, seconds=res.seconds)
@@ -255,7 +277,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
 
     try:
         await box.start()
-        seg = await invoke("main", tdir / "prompt.md", sb.timeout_s, resume=False)
+        seg = await invoke("main", prompt_path, sb.timeout_s, resume=False)
         while True:
             answer, _ = final_answer(segments)
             if answer or classify_error(seg.error_text) in ("auth", "rate_limit"):
@@ -263,7 +285,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
             if seg.timed_out:
                 if agent.cfg.finalize_on_timeout and not finalized:
                     await box.kill_agent_processes()
-                    finalize = tdir / "finalize.md"
+                    finalize = adir / "finalize.md"
                     finalize.write_text(resolve("prompts/finalize.md").read_text(encoding="utf-8"), encoding="utf-8")
                     finalized = True
                     seg = await invoke("finalize", finalize, agent.cfg.finalize_timeout_s, resume=True)
@@ -272,7 +294,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
             remaining = sb.timeout_s - sum(s.seconds for s in segments if s.kind != "finalize")
             if seg.got_result and not seg.is_error and nudges < agent.cfg.max_nudges and remaining > 60:
                 nudges += 1
-                nudge = tdir / "nudge.md"
+                nudge = adir / "nudge.md"
                 nudge.write_text(resolve("prompts/nudge.md").read_text(encoding="utf-8"), encoding="utf-8")
                 seg = await invoke(f"nudge{nudges}", nudge, remaining, resume=True)
                 continue
@@ -280,18 +302,18 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
     except asyncio.CancelledError:
         harness_error = "interrupted"
         raise
-    except Exception as e:  # noqa: BLE001 - recorded, and the trial is retried on the next run
+    except Exception as e:  # noqa: BLE001 - recorded, and the attempt is retried on the next run
         harness_error = f"{type(e).__name__}: {e}"
     finally:
         try:
             for d in agent.session_dirs:
-                await box.copy_out(d, tdir / "agent_session" / Path(d).name.lstrip("."))
-            await box.proxy_log(tdir / "network.log")
+                await box.copy_out(d, adir / "agent_session" / Path(d).name.lstrip("."))
+            await box.proxy_log(adir / "network.log")
         except Exception:  # noqa: BLE001
             pass
         await box.stop()
         if not sb.keep_workspace:
-            remove_workspace(workspace, tdir / "workspace_files.tsv")
+            remove_workspace(workspace, adir / "workspace_files.tsv")
         elif sb.input_mode == "copy" and not sb.keep_input_data:
             remove_inputs(workspace / "data", inputs)
 
@@ -299,7 +321,7 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
         status, err_kind = classify(segments, answer)
         if harness_error:
             status = "harness_error"
-        usage_tokens = agent.session_usage(tdir / "agent_session") or _sum_usage(segments)
+        usage_tokens = agent.session_usage(adir / "agent_session") or _sum_usage(segments)
         # a segment killed before its result event never reported its dollar cost;
         # agents priced from their session's token totals do not have that gap
         cost = agent.cost_from_tokens(usage_tokens)
@@ -308,10 +330,10 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
             cost = sum(s.cost_usd for s in segments)
         # what the audit and transcript see: the invocations plus subagent work that
         # only the agent's session records hold (the answer comes from the main thread)
-        recorded = segments + agent.subagent_segments(tdir / "agent_session")
+        recorded = segments + agent.subagent_segments(adir / "agent_session")
         result = {
-            "task_id": problem.id,
-            "trial": trial,
+            "problem_id": problem.id,
+            "attempt": attempt,
             "human_solvable": problem.human_solvable,
             "status": status,
             "error_kind": err_kind,
@@ -337,12 +359,12 @@ async def run_trial(cfg: RunConfig, agent: Agent, problem: Problem, trial: int,
             "started_at": started,
             "finished_at": now(),
         }
-        (tdir / "trajectory.json").write_text(
+        (adir / "trajectory.json").write_text(
             json.dumps({"segments": [asdict(s) for s in recorded]}, ensure_ascii=False), encoding="utf-8"
         )
-        (tdir / "transcript.md").write_text(render_transcript(problem.id, trial, recorded), encoding="utf-8")
+        (adir / "transcript.md").write_text(render_transcript(problem.id, attempt, recorded), encoding="utf-8")
         result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-        scrub_secrets(tdir, secret_values())
+        scrub_secrets(adir, secret_values())
     return result
 
 
@@ -395,65 +417,65 @@ def _short(text: str | None, n: int = 60) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
-def finished(tdir: Path) -> bool:
-    path = tdir / "result.json"
+def finished(adir: Path) -> bool:
+    path = adir / "result.json"
     return path.is_file() and json.loads(path.read_text(encoding="utf-8")).get("status") in TERMINAL
 
 
-class TaskData:
-    """Each question's input data, on disk only while its trials need it.
+class ProblemData:
+    """Each problem's input data, on disk only while its attempts need it.
 
-    A question's data downloads when its first trial is about to start. The next
-    question's download starts with the current question's last trial, so it
-    overlaps with that trial. With `dataset.delete_after_task`, the data is deleted
-    once every trial of the question has a final status (a trial stopped by a usage
+    A problem's data downloads when its first attempt is about to start. The next
+    problem's download starts with the current problem's last attempt, so it
+    overlaps with that attempt. With `dataset.delete_after_problem`, the data is deleted
+    once every attempt of the problem has a final status (an attempt stopped by a usage
     limit keeps it, for the resumed run).
     """
 
     def __init__(self, cfg: RunConfig, run_dir: Path, pending: dict[str, int]) -> None:
         self.cfg, self.run_dir = cfg, run_dir
-        self.order = [t for t, n in pending.items() if n]  # questions with trials to run
+        self.order = [t for t, n in pending.items() if n]  # problems with attempts to run
         self.pending = dict(pending)
         self.started: Counter[str] = Counter()
         self.left = dict(pending)
         self.fetches: dict[str, asyncio.Task[None]] = {}
         self.lock = asyncio.Lock()  # one download at a time
 
-    def _dir(self, task_id: str) -> Path:
-        return task_data_dir(self.cfg.dataset.name, task_id, self.cfg.dataset.root)
+    def _dir(self, problem_id: str) -> Path:
+        return problem_data_dir(self.cfg.dataset.name, problem_id, self.cfg.dataset.root)
 
-    def _fetch(self, task_id: str) -> asyncio.Task[None]:
-        if task_id not in self.fetches:
-            task = asyncio.create_task(self._download(task_id))
+    def _fetch(self, problem_id: str) -> asyncio.Task[None]:
+        if problem_id not in self.fetches:
+            task = asyncio.create_task(self._download(problem_id))
             # a prefetch nobody waits for (the run stopped) must not warn at exit
             task.add_done_callback(lambda t: t.cancelled() or t.exception())
-            self.fetches[task_id] = task
-        return self.fetches[task_id]
+            self.fetches[problem_id] = task
+        return self.fetches[problem_id]
 
-    async def _download(self, task_id: str) -> None:
-        if (self._dir(task_id) / PREPARED_MARKER).exists():
+    async def _download(self, problem_id: str) -> None:
+        if (self._dir(problem_id) / PREPARED_MARKER).exists():
             return
         async with self.lock:
-            print(f"  downloading data for {task_id}")
-            await asyncio.to_thread(prepare_tasks, self.cfg.dataset.name, self.cfg.dataset.root, [task_id])
+            print(f"  downloading data for {problem_id}")
+            await asyncio.to_thread(prepare_problems, self.cfg.dataset.name, self.cfg.dataset.root, [problem_id])
 
-    async def acquire(self, task_id: str) -> None:
-        """Wait until the question's data is on disk."""
-        self.started[task_id] += 1
-        fetch = self._fetch(task_id)
-        if self.started[task_id] == self.pending[task_id]:
-            i = self.order.index(task_id)
+    async def acquire(self, problem_id: str) -> None:
+        """Wait until the problem's data is on disk."""
+        self.started[problem_id] += 1
+        fetch = self._fetch(problem_id)
+        if self.started[problem_id] == self.pending[problem_id]:
+            i = self.order.index(problem_id)
             if i + 1 < len(self.order):
                 self._fetch(self.order[i + 1])
         await asyncio.shield(fetch)
 
-    def release(self, task_id: str) -> None:
-        self.left[task_id] -= 1
-        if self.left[task_id] or not self.cfg.dataset.delete_after_task:
+    def release(self, problem_id: str) -> None:
+        self.left[problem_id] -= 1
+        if self.left[problem_id] or not self.cfg.dataset.delete_after_problem:
             return
-        if all(finished(trial_dir(self.run_dir, task_id, k)) for k in range(1, self.cfg.n_trials + 1)):
-            rmtree(self._dir(task_id))
-            print(f"  deleted data for {task_id}")
+        if all(finished(attempt_dir(self.run_dir, problem_id, k)) for k in range(1, self.cfg.n_attempts + 1)):
+            rmtree(self._dir(problem_id))
+            print(f"  deleted data for {problem_id}")
 
 
 async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None) -> Path:
@@ -462,24 +484,24 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
     except FileNotFoundError:
         prepare_meta(cfg.dataset.name, cfg.dataset.root)
         all_problems = load_problems(cfg.dataset.name, cfg.dataset.root)
-    problems = select_problems(all_problems, cfg.dataset.task_ids, cfg.dataset.human_solvable)
+    problems = select_problems(all_problems, cfg.dataset.problem_ids, cfg.dataset.human_solvable)
     if not problems:
-        raise RuntimeError("no tasks selected")
+        raise RuntimeError("no problems selected")
     agent = make_agent(cfg.agent)
     run_dir = cfg.run_dir
     await write_manifest(cfg, agent, run_dir)
     grade = cfg.grader.auto if grade is None else grade
 
-    # every trial of one question, then the next question
-    jobs = [(p, k) for p in problems for k in range(1, cfg.n_trials + 1)]
-    todo = {(p.id, k) for p, k in jobs if force or not finished(trial_dir(run_dir, p.id, k))}
-    data = TaskData(cfg, run_dir, {p.id: sum(1 for k in range(1, cfg.n_trials + 1) if (p.id, k) in todo)
+    # every attempt at one problem, then the next problem
+    jobs = [(p, k) for p in problems for k in range(1, cfg.n_attempts + 1)]
+    todo = {(p.id, k) for p, k in jobs if force or not finished(attempt_dir(run_dir, p.id, k))}
+    data = ProblemData(cfg, run_dir, {p.id: sum(1 for k in range(1, cfg.n_attempts + 1) if (p.id, k) in todo)
                                    for p in problems})
     total = len(jobs)
     sem = asyncio.Semaphore(max(1, cfg.concurrency))
     abort: list[str] = []
     done = 0
-    print(f"run {cfg.run_name}: {len(problems)} tasks × {cfg.n_trials} trials = {total} "
+    print(f"run {cfg.run_name}: {len(problems)} problems × {cfg.n_attempts} attempts = {total} "
           f"({total - len(todo)} already done) → {run_dir}")
 
     async def one(problem: Problem, k: int) -> dict[str, Any] | None:
@@ -487,7 +509,7 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
         async with sem:
             if abort:
                 return None
-            tdir = trial_dir(run_dir, problem.id, k)
+            adir = attempt_dir(run_dir, problem.id, k)
             needs_data = (problem.id, k) in todo
             if needs_data:
                 try:
@@ -496,17 +518,20 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
                     abort.append(f"data download failed for {problem.id}: {_short(str(e), 300)}")
                     return None
             try:
-                result = await run_trial(cfg, agent, problem, k, run_dir, force=force)
+                result = await run_attempt(cfg, agent, problem, k, run_dir, force=force)
+            except PromptChanged as e:
+                abort.append(str(e))
+                return None
             finally:
                 if needs_data:
                     data.release(problem.id)
             done += 1
-            idx = done  # `done` moves on while this trial is being graded
+            idx = done  # `done` moves on while this attempt is being graded
             skipped = result.pop("_skipped", False)
             g = None
             if grade and result.get("status") in TERMINAL:
                 try:
-                    g = await grade_trial(tdir, problem, cfg.grader)
+                    g = await grade_attempt(adir, problem, cfg.grader, cfg.sandbox.image)
                 except Exception as e:  # noqa: BLE001 - grading can be redone with `bmbench grade`
                     print(f"    grading failed for {problem.id} r{k}: {e}")
             mark = "" if g is None else (" ✓" if g.get("score") else " ✗") + (" [cheated]" if g.get("cheated") else "")
@@ -532,26 +557,26 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
     return run_dir
 
 
-async def grade_run(run_dir: Path, *, force: bool = False, tasks: list[str] | None = None,
+async def grade_run(run_dir: Path, *, force: bool = False, problems: list[str] | None = None,
                     concurrency: int = 2, overrides: list[str] | None = None) -> None:
     cfg = load_run_config(run_dir, overrides)
     problems = {p.id: p for p in load_problems(cfg.dataset.name, cfg.dataset.root)}
     sem = asyncio.Semaphore(concurrency)
-    trial_dirs = sorted((run_dir / "trials").glob("*/r*"))
+    attempt_dirs = sorted((run_dir / "problems").glob("*/attempt-*"))
 
-    async def one(tdir: Path) -> None:
-        task_id = tdir.parent.name
-        if tasks and task_id not in tasks:
+    async def one(adir: Path) -> None:
+        problem_id = adir.parent.name
+        if problems and problem_id not in problems:
             return
         async with sem:
             try:
-                g = await grade_trial(tdir, problems[task_id], cfg.grader, force=force)
+                g = await grade_attempt(adir, problems[problem_id], cfg.grader, cfg.sandbox.image, force=force)
                 if g is not None:
-                    print(f"{task_id} {tdir.name}: score={g['score']} correct={g['correct']} cheated={g['cheated']}")
+                    print(f"{problem_id} {adir.name}: score={g['score']} correct={g['correct']} cheated={g['cheated']}")
             except Exception as e:  # noqa: BLE001
-                print(f"{task_id} {tdir.name}: grading failed: {e}")
+                print(f"{problem_id} {adir.name}: grading failed: {e}")
 
-    await asyncio.gather(*(one(t) for t in trial_dirs))
+    await asyncio.gather(*(one(t) for t in attempt_dirs))
 
 
 def load_run_config(run_dir: Path, overrides: list[str] | None = None) -> RunConfig:

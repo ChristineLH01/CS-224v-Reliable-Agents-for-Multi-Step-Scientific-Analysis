@@ -7,9 +7,12 @@ sees only what it needs:
   1. correctness -- question, rubric, the extracted answer (+ final message as context)
   2. cheating    -- question, every tool call, regex pre-flags, the proxy log
 
-Both judges are one chat-completions call to one fixed model for every agent
-(default GPT-6 Sol), through the OpenAI-compatible LiteLLM proxy named in
-LITELLM_BASE_URL. The call runs on the host, outside any sandbox.
+One fixed judge model grades every agent. The model name picks the route:
+
+  claude-*  a tool-less `claude -p` in a throwaway sandbox container, on the Claude
+            subscription (the agent's own auth; default: Opus 5.5)
+  others    one chat-completions call to the OpenAI-compatible LiteLLM proxy named
+            in LITELLM_BASE_URL, from the host (e.g. gpt-6.1-sol; billed per token)
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ import re
 import ssl
 import urllib.error
 import urllib.request
+import uuid
 from collections import Counter
 from functools import cache
 from pathlib import Path
@@ -29,9 +33,13 @@ from typing import Any
 
 import truststore
 
-from bmbench.config import LITELLM_KEY_ENV, LITELLM_URL_ENV, GraderConfig, resolve
+from bmbench.agents.base import classify_error
+from bmbench.config import LITELLM_KEY_ENV, LITELLM_URL_ENV, SECRET_ENV, GraderConfig, SandboxConfig, resolve
 from bmbench.dataset import Problem
+from bmbench.sandbox import LABEL, run_cmd
 from bmbench.trajectory import Segment, Step, action_log, tool_inputs_text
+
+DEFAULT_IMAGE = SandboxConfig().image
 
 JUDGE_SYSTEM = (
     "You are a careful, impartial grader for a scientific benchmark. You have no tools. "
@@ -192,8 +200,71 @@ def _cost(usage: dict[str, Any], reported: str | None, cfg: GraderConfig) -> flo
     return (int(usage.get("prompt_tokens") or 0) * usd_in + int(usage.get("completion_tokens") or 0) * usd_out) / 1e6
 
 
-async def judge(prompt: str, schema: dict, cfg: GraderConfig, retries: int = 3) -> dict[str, Any]:
-    """One chat-completions call with a strict JSON-schema reply; returns the parsed verdict."""
+def uses_claude(cfg: GraderConfig) -> bool:
+    return cfg.model.startswith("claude-")
+
+
+async def judge(prompt: str, schema: dict, cfg: GraderConfig, image: str = DEFAULT_IMAGE,
+                retries: int = 2) -> dict[str, Any]:
+    """{verdict, cost_usd, usage: {prompt_tokens, completion_tokens}} from one judge call."""
+    if uses_claude(cfg):
+        return await _judge_claude(prompt, schema, cfg, image, retries)
+    return await _judge_litellm(prompt, schema, cfg, retries)
+
+
+async def _judge_claude(prompt: str, schema: dict, cfg: GraderConfig, image: str, retries: int) -> dict[str, Any]:
+    """One tool-less `claude -p` call in a throwaway container: the same auth as the
+    Claude Code agent, nothing from the host's ~/.claude."""
+    last_error = ""
+    for attempt in range(retries + 1):
+        name = f"bmb-judge-{uuid.uuid4().hex[:10]}"
+        argv = ["docker", "run", "--rm", "-i", "--name", name, "--label", f"{LABEL}=1", "-u", "agent"]
+        for k in SECRET_ENV:
+            if os.environ.get(k):
+                argv += ["-e", k]  # value taken from our environment, not argv
+        argv += [image, "timeout", "-k", "10", str(cfg.timeout_s), "claude", "-p", "--model", cfg.model]
+        if cfg.effort:
+            argv += ["--effort", cfg.effort]
+        argv += ["--tools", "", "--no-session-persistence", "--output-format", "json",
+                 "--json-schema", json.dumps(schema), "--system-prompt", JUDGE_SYSTEM]
+        proc = await asyncio.create_subprocess_exec(
+            *argv, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(prompt.encode()), timeout=cfg.timeout_s + 60)
+        except TimeoutError:
+            await run_cmd("docker", "rm", "-f", name, check=False)
+            proc.kill()
+            await proc.wait()
+            last_error = "judge timed out"
+            continue
+        text = out.decode(errors="replace").strip()
+        try:
+            data = json.loads(text.splitlines()[-1]) if text else {}
+        except json.JSONDecodeError:
+            data = {}
+        verdict = data.get("structured_output")
+        if verdict is None and isinstance(data.get("result"), str):
+            try:
+                verdict = json.loads(data["result"])
+            except json.JSONDecodeError:
+                verdict = None
+        if isinstance(verdict, dict) and not data.get("is_error"):
+            u = data.get("usage") or {}
+            usage = {"prompt_tokens": sum(int(u.get(k) or 0) for k in (
+                         "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")),
+                     "completion_tokens": int(u.get("output_tokens") or 0)}
+            return {"verdict": verdict, "cost_usd": float(data.get("total_cost_usd") or 0.0), "usage": usage}
+        last_error = (data.get("result") if isinstance(data.get("result"), str) else "") or err.decode(errors="replace")[-1500:]
+        if classify_error(last_error) == "auth":
+            break
+        await asyncio.sleep(10 * (attempt + 1))
+    raise RuntimeError(f"judge failed ({cfg.model}): {last_error.strip()[:1500]}")
+
+
+async def _judge_litellm(prompt: str, schema: dict, cfg: GraderConfig, retries: int) -> dict[str, Any]:
+    """One chat-completions call with a strict JSON-schema reply."""
     url, key = judge_endpoint()
     body: dict[str, Any] = {
         "model": cfg.model,
@@ -228,11 +299,11 @@ async def judge(prompt: str, schema: dict, cfg: GraderConfig, retries: int = 3) 
     raise RuntimeError(f"judge failed ({cfg.model}): {last_error.strip()[:1500]}")
 
 
-# -- grading one trial ---------------------------------------------------------
+# -- grading one attempt ---------------------------------------------------------
 
 
-def load_segments(trial_dir: Path) -> list[Segment]:
-    path = trial_dir / "trajectory.json"
+def load_segments(attempt_dir: Path) -> list[Segment]:
+    path = attempt_dir / "trajectory.json"
     if not path.is_file():
         return []
     raw = json.loads(path.read_text(encoding="utf-8"))
@@ -244,22 +315,22 @@ def load_segments(trial_dir: Path) -> list[Segment]:
     return segments
 
 
-async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig,
+async def grade_attempt(attempt_dir: Path, problem: Problem, cfg: GraderConfig, image: str = DEFAULT_IMAGE,
                       force: bool = False) -> dict[str, Any] | None:
-    out_path = trial_dir / "grade.json"
+    out_path = attempt_dir / "grade.json"
     if out_path.is_file() and not force:
         return json.loads(out_path.read_text(encoding="utf-8"))
-    result_path = trial_dir / "result.json"
+    result_path = attempt_dir / "result.json"
     if not result_path.is_file():
         return None
     result = json.loads(result_path.read_text(encoding="utf-8"))
-    segments = load_segments(trial_dir)
+    segments = load_segments(attempt_dir)
     answer = result.get("answer") or ""
     final_message = result.get("final_text") or ""
 
     grade: dict[str, Any] = {
-        "task_id": problem.id,
-        "trial": result.get("trial"),
+        "problem_id": problem.id,
+        "attempt": result.get("attempt"),
         "judge": {"model": cfg.model, "effort": cfg.effort, "cost_usd": 0.0, "prompt_tokens": 0,
                   "completion_tokens": 0},
     }
@@ -282,7 +353,7 @@ async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig,
             answer=answer or "(empty: the agent gave no <answer> tag)",
             final_message=_clip(final_message, cfg.max_final_message_chars),
         )
-        res = await judge(prompt, ANSWER_SCHEMA, cfg)
+        res = await judge(prompt, ANSWER_SCHEMA, cfg, image)
         v = res["verdict"]
         spent(res)
         grade.update(correct=bool(v.get("correct")), extracted_answer=str(v.get("extracted_answer", "")),
@@ -291,7 +362,7 @@ async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig,
 
     # 2) cheating audit
     flags = regex_flags(tool_inputs_text(segments))
-    network = summarize_network(trial_dir / "network.log")
+    network = summarize_network(attempt_dir / "network.log")
     grade["flags"] = flags
     grade["network"] = {k: v for k, v in network.items() if k != "http_urls"}
     n_tools = sum(1 for seg in segments for s in seg.steps if s.kind == "tool_use")
@@ -307,7 +378,7 @@ async def grade_trial(trial_dir: Path, problem: Problem, cfg: GraderConfig,
             network=_network_text(network),
             actions=action_log(segments, cfg.max_action_log_chars),
         )
-        res = await judge(prompt, AUDIT_SCHEMA, cfg)
+        res = await judge(prompt, AUDIT_SCHEMA, cfg, image)
         v = res["verdict"]
         spent(res)
         grade.update(cheated=bool(v.get("cheated")), cheat_evidence=str(v.get("evidence", "")),

@@ -130,8 +130,8 @@ def describe_tool_input(tool: str | None, data: Any) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
-def render_transcript(task_id: str, trial: int, segments: list[Segment], tool_result_chars: int = 2500) -> str:
-    lines = [f"# Transcript: {task_id} / trial {trial}", ""]
+def render_transcript(problem_id: str, attempt: int, segments: list[Segment], tool_result_chars: int = 2500) -> str:
+    lines = [f"# Transcript: {problem_id} / attempt {attempt}", ""]
     for seg in segments:
         lines += [
             f"## Segment `{seg.kind}`: exit {seg.exit_code}"

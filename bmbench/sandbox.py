@@ -1,4 +1,4 @@
-"""One Docker sandbox per trial: an agent container and, in `allowlist` mode, its proxy.
+"""One Docker sandbox per attempt: an agent container and, in `allowlist` mode, its proxy.
 
     allowlist:  agent ── <name>-net (internal: no route out) ── <name>-proxy ── bridge ── internet
     open:       agent ── default bridge ── internet
@@ -26,8 +26,8 @@ WORKDIR = "/workspace"
 DATA_DIR = "/workspace/data"
 AGENT_USER = "agent"
 PROXY_PORT = 3128
-#: The proxy's name on the trial's own network. Container names can exceed the
-#: 63-character DNS label limit (long run names and task ids), aliases need not.
+#: The proxy's name on the attempt's own network. Container names can exceed the
+#: 63-character DNS label limit (long run names and problem ids), aliases need not.
 PROXY_ALIAS = "bmb-proxy"
 
 
