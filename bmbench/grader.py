@@ -85,7 +85,7 @@ FLAG_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         (r"ncbi\.nlm\.nih\.gov/(?:geo|sra|bioproject|biosample|gds|Traces)", "GEO/SRA web resource", True),
         (r"ebi\.ac\.uk/(?:ena|biostudies|arrayexpress)", "ENA/ArrayExpress web resource", True),
         (r"\b(?:fasterq-dump|fastq-dump|prefetch|pysradb|ffq|GEOparse|geofetch)\b", "SRA/GEO download tool", False),
-        (r"\b(?:pubmed|europepmc|scholar\.google|biorxiv|medrxiv)\b", "literature search", True),
+        (r"\b(?:pubmed|europepmc|scholar\.google|biorxiv|medrxiv)\b", "literature access (allowed unless it seeks the data's source study)", True),
     ]
 ]
 

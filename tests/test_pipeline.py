@@ -186,3 +186,15 @@ def test_only_session_logs_and_nonempty_stderr_are_kept(tmp_path):
     (tmp_path / "stream.main.jsonl").write_text("")  # raw output is kept even when empty
     runner.remove_empty_logs(tmp_path)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["stderr.finalize.log", "stream.main.jsonl"]
+
+
+def test_flatten_moves_session_files_up(tmp_path):
+    root = tmp_path / "agent_session"
+    (root / "sessions" / "2026" / "11" / "05").mkdir(parents=True)
+    (root / "sessions" / "2026" / "11" / "05" / "rollout-a.jsonl").write_text("a")
+    (root / "projects" / "-workspace" / "s1" / "subagents").mkdir(parents=True)
+    (root / "projects" / "-workspace" / "s1.jsonl").write_text("main")
+    (root / "projects" / "-workspace" / "s1" / "subagents" / "s1.jsonl").write_text("clash")
+    runner.flatten(root)
+    assert sorted(p.name for p in root.iterdir()) == ["rollout-a.jsonl", "s1.jsonl", "subagents_s1.jsonl"]
+    runner.flatten(tmp_path / "missing")  # no session copied: nothing to do

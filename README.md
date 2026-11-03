@@ -28,7 +28,7 @@ one independent run of the agent on a problem, in a fresh sandbox.
 | Sandbox | A fresh Docker container per attempt, with standard bioinformatics tools (samtools, BLAST+, HOMER, DESeq2, scanpy, …). The agent can install more with conda or pip. Only the problem's data is mounted; the answer key never is. |
 | Network | Through a proxy that only allows the problem's listed sites (NCBI, Ensembl, UCSC, conda, PyPI, …) and the model API. |
 | Limits | 1 hour, 4 CPUs and 3.5 GB RAM per attempt, for the preview and the full set alike. After a timeout, the agent gets one turn to give its best answer. |
-| Attempts | 3 per problem. Problems run one at a time: each problem's data is downloaded before its attempts and deleted after them. |
+| Attempts | 3 per problem, and 2 attempts run at a time (`concurrency: 2`). Attempts run problem by problem: each problem's data is downloaded before its first attempt and deleted after its last. |
 | Grading | One judge for every agent: Opus 5.5, run as `claude -p` on the Claude subscription. It checks (1) the answer against the answer key and (2) the trajectory for cheating, i.e. looking up the source dataset (GEO/SRA accessions, the original paper). An attempt scores 1 only if it is correct and did not cheat. |
 
 ## Metrics
@@ -83,7 +83,8 @@ uv run bmbench show   -r runs/<run_name> <problem> <k>   # one attempt (--full: 
 - **Resuming:** re-running the same command skips finished attempts. If a usage limit stops the
   run, run the same command again later.
 - **Changing settings:** `--problems`, `--attempts` and `--run-name` pick the problems, the number
-  of attempts and the run name. `--set key=value` overrides any field in `bmbench/config.py`, e.g.
+  of attempts and the run name. `--concurrency <n>` sets how many attempts run at once; raise it
+  only if Docker has CPUs and memory for *n* × the per-attempt limits. `--set key=value` overrides any field in `bmbench/config.py`, e.g.
   `--problems hb024 --set sandbox.timeout_s=7200` re-runs one problem with a 2-hour limit, in a
   run folder of its own.
 - **Changing models:** the agent model must be one its CLI can use: Claude models for Claude

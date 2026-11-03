@@ -166,6 +166,26 @@ def remove_workspace(workspace: Path, listing: Path) -> None:
     rmtree(workspace)
 
 
+def flatten(root: Path) -> None:
+    """Move every file under `root` up into `root` itself and drop the emptied folders:
+    the agents nest a session log or two under date or project folders
+    (`sessions/2026/11/05/rollout-….jsonl`). Names are unique ids; a clash keeps
+    its folder as a prefix."""
+    if not root.is_dir():
+        return
+    files = (p for p in root.rglob("*") if p.is_file() and p.parent != root)
+    for path in sorted(files, key=lambda p: (len(p.parts), str(p))):  # shallowest keep their names
+        target = root / path.name
+        if target.exists():
+            target = root / f"{path.parent.name}_{path.name}"
+        path.rename(target)
+    for d in sorted((p for p in root.rglob("*") if p.is_dir()), key=lambda p: -len(p.parts)):
+        try:
+            d.rmdir()  # only empty ones
+        except OSError:
+            pass
+
+
 def remove_empty_logs(adir: Path) -> None:
     """Drop the stderr logs of segments that printed nothing there (the usual case)."""
     for log in adir.glob("stderr.*.log"):
@@ -321,6 +341,7 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
         elif sb.input_mode == "copy" and not sb.keep_input_data:
             remove_inputs(workspace / "data", inputs)
         remove_empty_logs(adir)  # every segment is parsed by now
+        flatten(adir / "agent_session")
 
         answer, final_text = final_answer(segments)
         status, err_kind = classify(segments, answer)
@@ -538,16 +559,16 @@ async def run(cfg: RunConfig, *, force: bool = False, grade: bool | None = None)
                 try:
                     g = await grade_attempt(adir, problem, cfg.grader, cfg.sandbox.image)
                 except Exception as e:  # noqa: BLE001 - grading can be redone with `bmbench grade`
-                    print(f"    grading failed for {problem.id} r{k}: {e}")
+                    print(f"    grading failed for {problem.id} attempt {k}: {e}")
             mark = "" if g is None else (" ✓" if g.get("score") else " ✗") + (" [cheated]" if g.get("cheated") else "")
             tag = "skip (done)" if skipped else result["status"]
             window = ((result.get("rate_limit") or {}).get("unifiedWindows") or {}).get("five_hour") or {}
             used = f", 5h-window {100 * window['utilization']:.0f}% used" if window.get("utilization") is not None else ""
-            print(f"[{idx}/{total}] {problem.id} r{k}: {tag}, {result.get('agent_seconds', 0) / 60:.1f} min, "
+            print(f"[{idx}/{total}] {problem.id} attempt {k}: {tag}, {result.get('agent_seconds', 0) / 60:.1f} min, "
                   f"${result.get('cost_usd', 0):.2f}{used}, answer={_short(result.get('answer'))!r}{mark}"
                   + (f"  ({result['harness_error']})" if result.get("harness_error") else ""))
             if result["status"] in FATAL:
-                abort.append(f"{result['status']} on {problem.id} r{k}: {_short(result['segments'][-1]['error_text'] if result['segments'] else '', 300)}")
+                abort.append(f"{result['status']} on {problem.id} attempt {k}: {_short(result['segments'][-1]['error_text'] if result['segments'] else '', 300)}")
             return result
 
     await asyncio.gather(*(one(p, k) for p, k in jobs))
