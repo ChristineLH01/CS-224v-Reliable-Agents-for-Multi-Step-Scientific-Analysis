@@ -28,10 +28,10 @@ class Step:
 
 @dataclass
 class Segment:
-    """One invocation of the agent: the main run, a nudge, a resume after an
-    out-of-memory kill, or the finalize turn."""
+    """One invocation of the agent: the main run, a nudge, or the finalize turn
+    (or, for SHELDON, the work recovered from its trace)."""
 
-    kind: str  # main | nudge<k> | oom_resume<k> | finalize
+    kind: str  # main | nudge<k> | finalize | sheldon
     exit_code: int = 0
     timed_out: bool = False
     seconds: float = 0.0
@@ -49,6 +49,12 @@ class Segment:
     model_usage: dict[str, Any] = field(default_factory=dict)
     rate_limit: dict[str, Any] = field(default_factory=dict)  # last rate-limit status seen
     error_text: str = ""
+    #: an answer the agent returned as a structured field (SHELDON), used before any
+    #: <answer> tag in the text
+    answer: str | None = None
+    #: the agent gave its answer on its own after the time limit (SHELDON's finalize stage)
+    closed_out: bool = False
+    info: dict[str, Any] = field(default_factory=dict)  # agent-specific details
     steps: list[Step] = field(default_factory=list)
 
     @property
@@ -75,8 +81,12 @@ def extract_answer(text: str | None) -> str | None:
 
 
 def final_answer(segments: list[Segment]) -> tuple[str | None, str]:
-    """(answer, final message). The latest segment's final text wins; if it has no
-    tag, fall back to the latest tagged main-thread text anywhere in the run."""
+    """(answer, final message). A structured answer (Segment.answer) comes first. Else
+    the latest segment's final text wins; if it has no tag, fall back to the latest
+    tagged main-thread text anywhere in the run."""
+    for seg in reversed(segments):
+        if seg.answer:
+            return seg.answer, seg.final_text or seg.answer
     final_text = ""
     for seg in reversed(segments):
         text = seg.final_text or _last_text(seg.steps)

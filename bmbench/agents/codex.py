@@ -12,14 +12,13 @@ egress proxy isolate it.
 from __future__ import annotations
 
 import json
-import os
 import shlex
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from bmbench.agents.base import Agent
-from bmbench.config import LITELLM_KEY_ENV, LITELLM_URL_ENV
+from bmbench.config import LITELLM_KEY_ENV, litellm_base_url
 from bmbench.trajectory import Segment, Step
 
 #: exit status of coreutils `timeout` when the limit fired (137 if it had to SIGKILL; an
@@ -35,10 +34,7 @@ class CodexAgent(Agent):
 
     @staticmethod
     def base_url() -> str:
-        base = os.environ.get(LITELLM_URL_ENV, "").strip().rstrip("/")
-        if not base:
-            raise RuntimeError(f"Codex needs {LITELLM_URL_ENV} (and {LITELLM_KEY_ENV}) in .env")
-        return base.removesuffix("/chat/completions")
+        return litellm_base_url()
 
     @property
     def infra_domains(self) -> tuple[str, ...]:

@@ -14,13 +14,13 @@ import yaml
 from bmbench.metrics import per_problem, summarize_by_split
 from bmbench.runner import fmt_memory
 
-AGENT_NAMES = {"claude_code": "Claude Code", "codex": "Codex"}
+AGENT_NAMES = {"claude_code": "Claude Code", "codex": "Codex", "sheldon": "SHELDON"}
 
 CSV_FIELDS = [
     "problem_id", "attempt", "human_solvable", "status", "score", "correct", "cheated",
     "answer", "normalized_answer", "cost_usd", "num_turns", "agent_seconds",
     "timed_out", "finalized_after_timeout", "out_of_memory", "nudges", "n_tool_calls",
-    "output_tokens", "cost_incomplete", "graded",
+    "output_tokens", "cost_incomplete", "graded", "rounds",
 ]
 
 
@@ -39,6 +39,7 @@ def collect(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                                       "num_turns", "agent_seconds", "timed_out", "finalized_after_timeout", "nudges",
                                       "out_of_memory", "cost_incomplete")},
             "output_tokens": (r.get("tokens") or {}).get("output_tokens"),
+            "rounds": (r.get("sheldon") or {}).get("rounds"),
             "n_tool_calls": sum((r.get("tool_counts") or {}).values()),
             "graded": g is not None,
         }
@@ -82,14 +83,24 @@ def _setup_line(run_dir: Path, n_problems: int, judge: str) -> str:
     inv = json.loads(man_path.read_text(encoding="utf-8"))["invocations"][-1] if man_path.is_file() else {}
     agent, sb = cfg.get("agent") or {}, cfg.get("sandbox") or {}
     n = cfg.get("n_attempts", "?")
-    found = re.search(r"\d+\.\d+\.\d+", inv.get("agent_version") or "")
-    version = found.group(0) if found else ""
-    name = AGENT_NAMES.get(agent.get("type", "claude_code"), agent.get("type", "?"))
+    kind = agent.get("type", "claude_code")
+    found = re.search(r"SHELDON ([0-9a-f]{7})" if kind == "sheldon" else r"\d+\.\d+\.\d+",
+                      inv.get("agent_version") or "")
+    version = found.group(found.lastindex or 0) if found else ""
+    name = AGENT_NAMES.get(kind, kind)
+    details = ""
+    if kind == "sheldon":
+        sh = agent.get("sheldon") or {}
+        params = sh.get("params") or {}
+        parallel = (f"≤ {params.get('select_k', 5)} hypotheses tested at once"
+                    if params.get("candidate_analysis_concurrent", True) else "one hypothesis tested at a time")
+        details = (f", {params.get('mode', 'staged')} mode, {sh.get('max_rounds', '?')} rounds, {parallel}, "
+                   "Responses API")
     network = "internet limited to each problem's allowed sites" if sb.get("network") == "allowlist" else "open internet"
     return (
         f"**Setup:** BioMysteryBench {(cfg.get('dataset') or {}).get('name', '?')} · "
         f"{n_problems} problems × {n} attempts each · {name} {version} (`{agent.get('model', '?')}`, "
-        f"effort `{agent.get('effort', 'default')}`) · per attempt: {round((sb.get('timeout_s') or 0) / 60)} min, "
+        f"effort `{agent.get('effort', 'default')}`{details}) · per attempt: {round((sb.get('timeout_s') or 0) / 60)} min, "
         f"{sb.get('cpus', '?')} CPUs, {fmt_memory(sb.get('memory', '?'))} RAM, {network}, no web search · "
         f"graded by `{judge}` against the answer key; an attempt scores 0 if it looked up the source dataset."
     )
@@ -131,6 +142,10 @@ def _markdown(run_dir: Path, metrics: dict[str, Any], problems: list[dict[str, A
                    f"flagged for cheating {m['cheated']}" + (f" ({_by_problem(problems, 'cheated')})" if m["cheated"] else "")]
         incomplete = sum(1 for rec in graded if rec.get("cost_incomplete"))
         lines += ["", f"Correct attempts per problem: {hist}", "", "Context: " + " · ".join(context)]
+        rounds = Counter(rec["rounds"] for rec in every if rec.get("rounds") is not None)
+        if rounds:
+            lines += ["", "Rounds reached per attempt: " + ", ".join(
+                f"{r} ({c} attempt{'s' if c != 1 else ''})" for r, c in sorted(rounds.items(), reverse=True))]
         if incomplete:
             lines += ["", f"Mean cost is a lower bound: {incomplete} attempt(s) were stopped before reporting their cost."]
 
@@ -149,8 +164,8 @@ def _markdown(run_dir: Path, metrics: dict[str, Any], problems: list[dict[str, A
               f"pass@{k} = share of problems solved in at least one of the {k} attempts · pass^{k} = share solved "
               f"in all {k} · answer agreement = share of attempts giving the problem's most common answer, right or "
               "wrong · cost = API-price estimate per attempt (not what a subscription is billed) · "
-              "timed out = hit the time limit (the agent then got one turn to give its best answer) · "
-              "out of memory = the agent was killed twice for going over the memory limit, before the time "
-              "limit (resumed with the time it had left after the first kill, it got one turn to give its best "
-              "answer after the second)."]
+              "timed out = hit the time limit (its running commands were stopped, and it then had up to 5 min "
+              "to give its best answer) · out of memory = the agent process itself was killed for going over the "
+              "memory limit; the attempt ends there and is scored incorrect (commands killed for memory do not "
+              "count: the agent sees the error and carries on)."]
     return "\n".join(lines) + "\n"

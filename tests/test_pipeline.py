@@ -252,36 +252,44 @@ _ANSWER = {"type": "result", "subtype": "success", "is_error": False, "result": 
            "num_turns": 3, "total_cost_usd": 0.1}
 
 
-def test_agent_killed_for_memory_is_resumed_not_timed_out(tmp_path, monkeypatch):
+_TAGGED = {"type": "assistant", "message": {"id": "m0", "content": [{"type": "text", "text": "<answer>GENEB</answer>"}]}}
+
+
+def test_agent_killed_for_memory_ends_the_attempt(tmp_path, monkeypatch):
     # the kernel killed mmseqs and then the agent CLI (exit 137) 200 s into a 1 h limit
-    result, box = _attempt(tmp_path, monkeypatch, [(137, 200.0, 2, [_WORKING]), (0, 50.0, 0, [_ANSWER])])
-    assert [s["kind"] for s in result["segments"]] == ["main", "oom_resume1"]
-    assert result["status"] == "completed" and result["answer"] == "GENEA"
-    assert not result["timed_out"] and not result["out_of_memory"]
+    result, box = _attempt(tmp_path, monkeypatch, [(137, 200.0, 2, [_WORKING])])
+    assert [s["kind"] for s in result["segments"]] == ["main"] and len(box.calls) == 1  # no resume, no closing turn
+    assert result["status"] == "out_of_memory" and result["answer"] is None
+    assert result["out_of_memory"] and not result["timed_out"]
     assert result["oom_kills"] == 2 and result["agent_oom_kills"] == 1
-    assert box.pkills == 1  # what the killed agent left running was stopped first
-    assert "--resume" in box.calls[1] and box.calls[1][3] == "3400"  # the time it had left
+
+
+def test_an_answer_written_before_a_memory_kill_does_not_count(tmp_path, monkeypatch):
+    result, _ = _attempt(tmp_path, monkeypatch, [(137, 200.0, 1, [_TAGGED, _WORKING])])
+    assert result["status"] == "out_of_memory" and result["answer"] is None
+
+
+def test_commands_killed_for_memory_do_not_end_the_attempt(tmp_path, monkeypatch):
+    # mmseqs was killed for memory, the agent saw the error and carried on to an answer
+    result, box = _attempt(tmp_path, monkeypatch, [(0, 900.0, 3, [_WORKING, _ANSWER])])
+    assert result["status"] == "completed" and result["answer"] == "GENEA"
+    assert result["oom_kills"] == 3 and result["agent_oom_kills"] == 0 and not result["out_of_memory"]
 
 
 def test_kill_at_the_time_limit_is_still_a_timeout(tmp_path, monkeypatch):
     # `timeout` sends SIGKILL (137) 30 s after the limit when the agent ignores SIGTERM
-    result, _ = _attempt(tmp_path, monkeypatch, [(137, 3630.0, 0, [_WORKING]), (0, 10.0, 0, [_ANSWER])])
+    result, box = _attempt(tmp_path, monkeypatch, [(137, 3630.0, 0, [_WORKING]), (0, 10.0, 0, [_ANSWER])])
     assert [s["kind"] for s in result["segments"]] == ["main", "finalize"]
-    assert result["timed_out"] and result["agent_oom_kills"] == 0
+    assert result["timed_out"] and result["finalized_after_timeout"] and result["agent_oom_kills"] == 0
+    assert box.prompts[1] == "finalize.md" and box.calls[1][3] == "300"  # the shared 5 min closing window
 
 
-def test_agent_killed_for_memory_twice_is_out_of_memory_with_a_final_turn(tmp_path, monkeypatch):
-    result, box = _attempt(tmp_path, monkeypatch, [(137, 200.0, 1, [_WORKING]), (137, 300.0, 1, [_WORKING]),
-                                                   (0, 10.0, 0, [_ANSWER])])
-    assert [s["kind"] for s in result["segments"]] == ["main", "oom_resume1", "finalize"]
-    assert result["out_of_memory"] and not result["timed_out"] and result["answer"] == "GENEA"
-    assert box.prompts[2] == "out_of_memory_final.md" and box.calls[2][3] == "180"
-
-
-def test_resume_after_a_memory_kill_that_runs_out_of_time_is_a_timeout(tmp_path, monkeypatch):
-    # killed for memory with a minute left; the resumed session then hits the time limit
-    result, box = _attempt(tmp_path, monkeypatch, [(137, 3540.0, 1, [_WORKING]), (124, 60.0, 0, [_WORKING]),
-                                                   (0, 10.0, 0, [_ANSWER])])
-    assert [s["kind"] for s in result["segments"]] == ["main", "oom_resume1", "finalize"]
-    assert box.calls[1][3] == "60" and box.prompts[2] == "finalize.md"
-    assert result["timed_out"] and result["finalized_after_timeout"] and not result["out_of_memory"]
+def test_scrub_secrets_in_small_and_large_files(tmp_path):
+    (tmp_path / "small.json").write_text('{"key": "sk-secret-123456"}')
+    (tmp_path / "big.jsonl").write_text("x" * 200 + "\n" + "token sk-secret-123456 here\n" * 50)
+    (tmp_path / "clean.txt").write_text("nothing to see")
+    runner.scrub_secrets(tmp_path, ["sk-secret-123456"], max_bytes=100)  # big.jsonl goes line by line
+    assert "sk-secret" not in (tmp_path / "small.json").read_text()
+    big = (tmp_path / "big.jsonl").read_text()
+    assert "sk-secret" not in big and big.count("[REDACTED]") == 50
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["big.jsonl", "clean.txt", "small.json"]

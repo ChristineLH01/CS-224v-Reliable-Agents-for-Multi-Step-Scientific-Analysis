@@ -14,7 +14,7 @@ agent:
   effort: high
   disallowed_tools: [WebSearch, AskUserQuestion]
   finalize_on_timeout: true
-  finalize_timeout_s: 180   # the "best answer now" turn after a timeout or running out of memory
+  finalize_timeout_s: 300   # the closing window after the time limit: one "best answer now" turn
   max_nudges: 1
 
 sandbox:

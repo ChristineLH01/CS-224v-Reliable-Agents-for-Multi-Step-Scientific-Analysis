@@ -15,7 +15,7 @@ agent:
   effort: high
   usd_per_mtok: [2.0, 0.10, 10.0]   # input, cached input, output: OpenAI list price, for the cost estimate
   finalize_on_timeout: true
-  finalize_timeout_s: 180
+  finalize_timeout_s: 300   # the closing window after the time limit: one "best answer now" turn
   max_nudges: 1
 
 sandbox:

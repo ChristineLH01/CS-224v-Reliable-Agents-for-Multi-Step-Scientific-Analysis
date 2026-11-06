@@ -14,6 +14,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from bmbench.agents.sheldon import SHELDON_COMMIT
 from bmbench.config import REPO_ROOT, SECRET_ENV, load_config, load_dotenv, resolve
 from bmbench.dataset import PREPARED_MARKER, dataset_dir, dir_size, load_problems, prepare, select_problems
 
@@ -58,6 +59,9 @@ def cmd_build(a: argparse.Namespace) -> None:
     versions = ["--build-arg", f"CLAUDE_CODE_VERSION={claude}"]
     if codex:  # otherwise the Dockerfile's pinned default
         versions += ["--build-arg", f"CODEX_VERSION={codex}"]
+    # SHELDON at its pinned commit, plus bmbench's runtime for it (a named build context)
+    versions += ["--build-arg", f"SHELDON_COMMIT={SHELDON_COMMIT}",
+                 "--build-context", f"sheldon_runtime={REPO_ROOT / 'bmbench/agents/sheldon_runtime'}"]
     steps = [
         ["docker", "build", *common, "--build-arg", f"AGENT_UID={uid}", "--build-arg", f"AGENT_GID={gid}",
          *versions, "-t", cfg.sandbox.image, str(REPO_ROOT / "docker/sandbox")],
@@ -69,8 +73,8 @@ def cmd_build(a: argparse.Namespace) -> None:
         print("+", " ".join(argv))
         if subprocess.run(argv).returncode != 0:
             sys.exit(f"build failed: {' '.join(argv[:4])}")
-    print(f"built {cfg.sandbox.image} (Claude Code {claude}, Codex {codex or 'Dockerfile default'}) "
-          f"and {cfg.sandbox.proxy_image}")
+    print(f"built {cfg.sandbox.image} (Claude Code {claude}, Codex {codex or 'Dockerfile default'}, "
+          f"SHELDON {SHELDON_COMMIT[:7]}) and {cfg.sandbox.proxy_image}")
 
 
 async def _doctor(a: argparse.Namespace) -> int:
@@ -98,6 +102,17 @@ async def _doctor(a: argparse.Namespace) -> int:
     _, ver, _ = await run_cmd("docker", "run", "--rm", "-u", "agent", cfg.sandbox.image, *agent.version_command(),
                               check=False)
     report(bool(ver.strip()), f"{agent.name} in image", ver.strip())
+    selftest = agent.selftest_command()
+    if selftest:
+        # the agent's whole loop against a scripted model, offline, inside the image
+        env_args = [x for k, v in agent.env().items() for x in ("-e", f"{k}={v}")]
+        _, out, err = await run_cmd("docker", "run", "--rm", "-u", "agent", "--network", "none", *env_args,
+                                    cfg.sandbox.image, *selftest, check=False, timeout=420)
+        lines = [json.loads(x) for x in out.splitlines() if x.startswith("{")]
+        verdict = next((x for x in reversed(lines) if x.get("type") == "selftest"), {})
+        failed = [k for k, v in (verdict.get("checks") or {}).items() if not v]
+        report(bool(verdict.get("ok")), f"{agent.name} offline selftest (full loop, scripted model)",
+               "all checks passed" if verdict.get("ok") else f"failed: {failed or err.strip()[-300:]}")
     auth = [k for k in agent.secret_env if os.environ.get(k)]
     report(bool(auth), f"{agent.name} credentials in environment/.env",
            ", ".join(auth) or f"set one of {', '.join(agent.secret_env)}")
@@ -170,9 +185,11 @@ async def _doctor(a: argparse.Namespace) -> int:
                         tmp_prompt = Path(tmp) / "p.txt"
                         tmp_prompt.write_text("Reply with exactly: OK", encoding="utf-8")
                         out_path, err_path = Path(tmp) / "o.jsonl", Path(tmp) / "e.txt"
-                        argv = agent.command(timeout_s=150, session_id=str(uuid.uuid4()))
+                        argv = (agent.auth_check_command(150)
+                                or agent.command(timeout_s=150, session_id=str(uuid.uuid4())))
                         res = await box.exec(argv, stdin_path=tmp_prompt, stdout_path=out_path, stderr_path=err_path,
-                                             deadline_s=180, env=agent.env(), secret_env=agent.secret_env)
+                                             deadline_s=180 + agent.closing_s, env=agent.env(),
+                                             secret_env=agent.secret_env)
                         seg = agent.parse(out_path, err_path, Segment(kind="doctor", exit_code=res.code))
                         ok = "OK" in seg.final_text and not seg.is_error
                         detail = f"{cfg.agent.model}: {seg.final_text.strip()[:80]!r}" if ok else seg.error_text[-400:]
@@ -238,8 +255,9 @@ def cmd_show(a: argparse.Namespace) -> None:
     result = json.loads((adir / "result.json").read_text(encoding="utf-8"))
     grade = json.loads((adir / "grade.json").read_text(encoding="utf-8")) if (adir / "grade.json").is_file() else {}
     for k in ("status", "answer", "cost_usd", "num_turns", "agent_seconds", "timed_out",
-              "finalized_after_timeout", "nudges", "tool_counts"):
-        print(f"{k:24s} {result.get(k)}")
+              "finalized_after_timeout", "nudges", "tool_counts", "sheldon"):
+        if k in result:
+            print(f"{k:24s} {result.get(k)}")
     for k in ("score", "correct", "cheated", "normalized_answer", "answer_rationale", "cheat_evidence"):
         if k in grade:
             print(f"{k:24s} {grade.get(k)}")

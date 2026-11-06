@@ -52,13 +52,18 @@ class AgentConfig:
     env: dict[str, str] = field(default_factory=dict)  # on top of the adapter's own defaults
     # After a wall-clock timeout: one resumed turn asking for the best answer so far.
     finalize_on_timeout: bool = True
-    finalize_timeout_s: int = 180  # that turn's limit, also after running out of memory
+    # The closing window after the time limit, the same for every agent: the limit of that
+    # resumed turn, or, for an agent that closes out on its own (SHELDON), how long it may
+    # run past the limit to give its answer, with its commands stopped.
+    finalize_timeout_s: int = 300
     # When a run ends with no <answer> tag: resumed turns asking it to finish.
     max_nudges: int = 1
-    # When the kernel kills the agent process itself for memory: resumed turns that carry
-    # on within the same time limit. Killed once more, the attempt ends out of memory,
-    # with one turn to give its best answer.
-    max_oom_resumes: int = 1
+    # (An agent process killed by the kernel for memory ends the attempt: no resume, no
+    # closing turn; it is scored incorrect and counted as out of memory.)
+    # SHELDON only: its own Config fields (method, engine, max_rounds, max_calls, max_usd,
+    # max_tokens, trace_prompts, params, ...), passed through unchanged; see
+    # configs/sheldon_preview.yaml. `model` and `effort` come from above.
+    sheldon: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -133,8 +138,11 @@ def auto_run_name(cfg: RunConfig) -> str:
     limit = f"{t // 3600}h" if t % 3600 == 0 else f"{round(t / 60)}min"
     attempts = f"{cfg.n_attempts}-attempt" + ("" if cfg.n_attempts == 1 else "s")
     model = a.model.removeprefix("claude-").replace(".", "-")
-    return "_".join([cfg.dataset.name, a.type.replace("_", "-"), model, a.effort or "default",
-                     f"timeout-{limit}", attempts])
+    parts = [cfg.dataset.name, a.type.replace("_", "-"), model, a.effort or "default"]
+    if a.type == "sheldon":  # its round budget changes what it does as much as the time limit
+        rounds = (a.sheldon or {}).get("max_rounds")
+        parts.append(f"{rounds}-rounds" if rounds else "no-round-cap")
+    return "_".join([*parts, f"timeout-{limit}", attempts])
 
 
 def resolve(path: str | Path) -> Path:
@@ -143,8 +151,14 @@ def resolve(path: str | Path) -> Path:
     return p if p.is_absolute() else REPO_ROOT / p
 
 
+#: Keys older run folders' config.yaml may still hold, accepted and ignored so that
+#: `grade` and `report` keep working on them.
+RETIRED = {"agent": {"max_oom_resumes"}}
+
+
 def _build(cls: type, data: dict[str, Any], where: str) -> Any:
     known = {f.name: f for f in dataclasses.fields(cls)}
+    data = {k: v for k, v in data.items() if k not in RETIRED.get(where, set())}
     unknown = sorted(set(data) - set(known))
     if unknown:
         raise ValueError(f"unknown config key(s) in {where or 'top level'}: {', '.join(unknown)}")
@@ -205,6 +219,14 @@ def load_dotenv(path: str | Path | None = None) -> None:
         value = value.strip().strip('"').strip("'")
         if key and value and not os.environ.get(key):
             os.environ[key] = value
+
+
+def litellm_base_url() -> str:
+    """The LiteLLM proxy's OpenAI-compatible base URL (…/v1), from LITELLM_BASE_URL."""
+    base = os.environ.get(LITELLM_URL_ENV, "").strip().rstrip("/")
+    if not base:
+        raise RuntimeError(f"set {LITELLM_URL_ENV} (and {LITELLM_KEY_ENV}) in .env")
+    return base.removesuffix("/chat/completions")
 
 
 def secret_values() -> list[str]:

@@ -82,6 +82,34 @@ RUN echo '{ echo 1000 > /proc/self/oom_score_adj; } 2>/dev/null' > /etc/profile.
  && mkdir -p /usr/local/libexec/bmbench \
  && printf '#!/bin/bash\n. /etc/profile.d/00-oom-first.sh\nexec /bin/bash -c "$1"\n' > /usr/local/libexec/bmbench/oom-first \
  && chmod 755 /usr/local/libexec/bmbench/oom-first
+
+# SHELDON (github.com/stanford-oval/sheldon), verbatim at a pinned commit, with the
+# exact dependency versions of its own uv.lock, in a venv on a uv-managed Python:
+# nothing the agent does to the `bio` env can break it, and the agent cannot edit it
+# (root-owned). Not on PATH; the agent's commands see the same environment as with
+# the other agents. bmbench's runtime for it (bmbench/agents/sheldon_runtime, passed
+# as the `sheldon_runtime` build context) joins that venv through a .pth file.
+# (uv stays off PATH, so the agents' environment is the same as before.)
+COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /opt/sheldon-tools/uv
+ARG SHELDON_REPO=https://github.com/stanford-oval/sheldon.git
+ARG SHELDON_COMMIT=7fbf027d1fb414443612d4ad2661b396c8352cd3
+RUN set -eux; \
+    git clone --quiet "$SHELDON_REPO" /opt/sheldon; \
+    git -C /opt/sheldon checkout --quiet "$SHELDON_COMMIT"; \
+    test "$(git -C /opt/sheldon rev-parse HEAD)" = "$SHELDON_COMMIT"; \
+    cd /opt/sheldon && export UV_PYTHON_INSTALL_DIR=/opt/sheldon-python UV_NO_CACHE=1; \
+    /opt/sheldon-tools/uv sync --frozen --no-dev --managed-python --python 3.12; \
+    # jinja2 is a declared dependency (pyproject.toml) missing from this commit's uv.lock
+    /opt/sheldon-tools/uv pip install --python /opt/sheldon/.venv/bin/python jinja2==3.1.6 markupsafe==3.0.4; \
+    /opt/sheldon/.venv/bin/python -c "import sheldon.methods.sheldon.loop, sheldon.runner"; \
+    git config --system --add safe.directory /opt/sheldon; \
+    chmod -R a+rX /opt/sheldon /opt/sheldon-python
+COPY --from=sheldon_runtime bmb_sheldon /opt/bmb-sheldon/bmb_sheldon
+RUN set -eux; \
+    site="$(/opt/sheldon/.venv/bin/python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"; \
+    echo /opt/bmb-sheldon > "$site/bmb_sheldon.pth"; \
+    chmod -R a+rX /opt/bmb-sheldon; \
+    /opt/sheldon/.venv/bin/python -m bmb_sheldon.driver --version
 USER agent
 ENV BASH_ENV=/etc/profile.d/00-oom-first.sh
 

@@ -46,6 +46,12 @@ class Agent(ABC):
     #: host environment variables holding this agent's credentials, passed into the
     #: sandbox by name only (never another agent's)
     secret_env: tuple[str, ...] = ()
+    #: whether a stopped session can be continued (`resume=True`): the finalize turn
+    #: after a timeout and the nudge. An agent that cannot (SHELDON) closes out on its
+    #: own within its command, which then runs up to `closing_s` past the time limit.
+    resumable: bool = True
+    #: move every session file up into one folder (see runner.flatten)
+    flatten_session: bool = True
 
     def __init__(self, cfg: AgentConfig) -> None:
         self.cfg = cfg
@@ -54,6 +60,12 @@ class Agent(ABC):
     def infra_domains(self) -> tuple[str, ...]:
         """Hosts the agent itself must reach (its model API), admitted by the proxy."""
         return ()
+
+    @property
+    def closing_s(self) -> int:
+        """Seconds a non-resumable agent's command may run past the time limit to give
+        its answer (0 for agents the runner resumes instead)."""
+        return 0
 
     @abstractmethod
     def command(self, *, timeout_s: int, session_id: str, resume: bool = False,
@@ -85,6 +97,27 @@ class Agent(ABC):
     def version_command(self) -> list[str]:
         return []
 
+    def auth_check_command(self, timeout_s: int) -> list[str] | None:
+        """argv for `doctor --auth-check`; None = `command()` with a one-word prompt."""
+        return None
+
+    def selftest_command(self) -> list[str] | None:
+        """argv for an offline check of the agent's wiring inside the image, if it has one."""
+        return None
+
+    def transcript(self, problem_id: str, attempt: int, segments: list[Segment],
+                   session_root: Path) -> str | None:
+        """An agent-specific transcript.md; None = the generic one."""
+        return None
+
+    def result_extra(self, session_root: Path, segments: list[Segment]) -> dict:
+        """Agent-specific facts for result.json, under the agent's name."""
+        return {}
+
+    def compact_session(self, session_root: Path) -> None:
+        """Shrink the copied session records once the attempt is written and scrubbed."""
+        return None
+
 
 def make_agent(cfg: AgentConfig) -> Agent:
     if cfg.type == "claude_code":
@@ -95,4 +128,8 @@ def make_agent(cfg: AgentConfig) -> Agent:
         from bmbench.agents.codex import CodexAgent  # noqa: PLC0415
 
         return CodexAgent(cfg)
-    raise ValueError(f"unknown agent type {cfg.type!r} (available: claude_code, codex)")
+    if cfg.type == "sheldon":
+        from bmbench.agents.sheldon import SheldonAgent  # noqa: PLC0415
+
+        return SheldonAgent(cfg)
+    raise ValueError(f"unknown agent type {cfg.type!r} (available: claude_code, codex, sheldon)")

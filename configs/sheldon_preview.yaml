@@ -1,0 +1,52 @@
+# SHELDON (github.com/stanford-oval/sheldon @ 7fbf027, unmodified) on the 5-problem
+# BioMysteryBench preview, under the same sandbox, prompt, limits and judge as
+# configs/claude_code_preview.yaml and configs/codex_preview.yaml.
+# The model is reached through the LiteLLM proxy in LITELLM_BASE_URL (.env), over the
+# Responses API (bmbench/agents/sheldon_runtime). Why each SHELDON value: README, section SHELDON.
+# The run folder is named from the settings (see auto_run_name in bmbench/config.py).
+n_attempts: 3           # attempts per problem
+concurrency: 2
+
+dataset:
+  name: preview
+  delete_after_problem: true
+
+agent:
+  type: sheldon
+  model: gpt-6-luna     # every stage, reasoning and coding
+  effort: high
+  usd_per_mtok: [0.10, 0.01, 0.50]   # input, cached input, output (proxy price list)
+  finalize_timeout_s: 300   # at the limit its commands are stopped; it then has 5 min for its own finalize stage
+  sheldon:                  # SHELDON's own Config fields
+    method: sheldon
+    engine: toolloop
+    max_rounds: 3
+    max_calls: null         # SHELDON's default 40 calls would end it in round 1
+    max_usd: null           # no cost cap, as for the other agents
+    max_tokens: 16000       # SHELDON's default (includes reasoning tokens on the Responses API)
+    trace_prompts: true
+    params:
+      mode: session         # one conversation per round for the deciding stages
+      rounds: 3
+      plan: true
+      n_initial: 3
+      n_explore: 3
+      select_k: 3           # with candidate_analysis_concurrent: at most 3 hypotheses tested at once
+      candidate_analysis_concurrent: true
+      candidate_analysis_max_evals: 3
+      stage_probes: true
+      explore_probe_calls: 20
+      finalize_probe_calls: 20
+      probes: [run_shell]   # opens in /workspace; SHELDON's web tools are Anthropic-only
+
+sandbox:
+  cpus: 4
+  memory: 3.5g
+  timeout_s: 3600       # 1 h wall clock per attempt
+  network: allowlist
+  keep_workspace: false
+
+grader:
+  auto: true
+  model: claude-opus-5-5   # claude -p on the Claude subscription
+  effort: medium

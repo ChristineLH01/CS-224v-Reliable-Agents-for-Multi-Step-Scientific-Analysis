@@ -15,6 +15,14 @@ bmbench = "bmbench.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
+# SHELDON itself, at the commit the sandbox image installs, for the tests of
+# bmbench/agents/sheldon_runtime (uv run --group dev --group sheldon pytest).
+sheldon = [
+    "sheldon @ git+https://github.com/stanford-oval/sheldon@7fbf027d1fb414443612d4ad2661b396c8352cd3",
+    "openai==3.5.0",
+    "anthropic==1.2.0",
+    "pydantic==2.13.5",
+]
 
 [build-system]
 requires = ["hatchling"]

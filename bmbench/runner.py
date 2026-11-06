@@ -205,20 +205,37 @@ def remove_inputs(data_dir: Path, inputs: list[str]) -> None:
 
 
 def scrub_secrets(root: Path, secrets: list[str], max_bytes: int = 50 * 1024 * 1024) -> None:
+    """Replace every secret value in the saved files. Files over `max_bytes` (SHELDON's
+    traces can be) are rewritten line by line instead of read whole."""
     if not secrets:
         return
+    needles = [s.encode() for s in secrets]
+
+    def clean(data: bytes) -> bytes:
+        for needle in needles:
+            data = data.replace(needle, b"[REDACTED]")
+        return data
+
     for dirpath, _dirs, files in os.walk(root):
         for fn in files:
             path = Path(dirpath) / fn
             try:
-                if path.is_symlink() or path.stat().st_size > max_bytes:
+                if path.is_symlink():
+                    continue
+                if path.stat().st_size > max_bytes:
+                    tmp = path.with_name(path.name + ".scrub")
+                    changed = False
+                    with open(path, "rb") as src, open(tmp, "wb") as dst:
+                        for line in src:
+                            new = clean(line)
+                            changed |= new != line
+                            dst.write(new)
+                    tmp.replace(path) if changed else tmp.unlink()
                     continue
                 data = path.read_bytes()
             except OSError:
                 continue
-            new = data
-            for s in secrets:
-                new = new.replace(s.encode(), b"[REDACTED]")
+            new = clean(data)
             if new != data:
                 path.write_bytes(new)
 
@@ -236,9 +253,12 @@ def stopped_by(segments: list[Segment]) -> str:
 
 
 def classify(segments: list[Segment], answer: str | None) -> tuple[str, str]:
-    """(status, error kind) for a finished attempt."""
+    """(status, error kind) for a finished attempt. An agent process killed for memory
+    ends the attempt as `out_of_memory`, whatever it had written."""
     errors = "\n".join(s.error_text for s in segments if s.error_text)
     kind = classify_error(errors) or ""
+    if stopped_by(segments) == "out_of_memory":
+        return "out_of_memory", kind
     if answer:
         return "completed", kind
     if kind == "auth":
@@ -292,7 +312,6 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
     segments: list[Segment] = []
     finalized = False
     nudges = 0
-    oom_resumes = 0
     harness_error = ""
 
     box = DockerSandbox(
@@ -310,7 +329,8 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
         out, err = adir / f"stream.{kind}.jsonl", adir / f"stderr.{kind}.log"
         oom_before = await box.oom_kills()
         res = await box.exec(argv, stdin_path=stdin, stdout_path=out, stderr_path=err,
-                             deadline_s=timeout_s + 120, env=agent.env(), secret_env=agent.secret_env)
+                             deadline_s=timeout_s + agent.closing_s + 120, env=agent.env(),
+                             secret_env=agent.secret_env)
         seg = Segment(kind=kind, exit_code=res.code, timed_out=res.timed_out, seconds=res.seconds)
         seg = agent.parse(out, err, seg)
         seg.oom_kills = max(0, await box.oom_kills() - oom_before)
@@ -325,24 +345,18 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
     try:
         await box.start()
         seg = await invoke("main", prompt_path, sb.timeout_s, resume=False)
-        while True:
+        # An agent that cannot resume (SHELDON) closes out within its own command.
+        while agent.resumable:
             answer, _ = final_answer(segments)
-            if answer or finalized or classify_error(seg.error_text) in ("auth", "rate_limit"):
+            # an agent process killed for memory ends the attempt: no resume, no closing turn
+            if answer or finalized or seg.oom_killed or classify_error(seg.error_text) in ("auth", "rate_limit"):
                 break
             remaining = sb.timeout_s - sum(s.seconds for s in segments if s.kind != "finalize")
-            if seg.oom_killed and oom_resumes < agent.cfg.max_oom_resumes:
-                await box.kill_agent_processes()  # what it left running still holds memory
-                oom_resumes += 1
-                # with the time it has left: a resume that then runs out of it is a timeout
-                seg = await invoke(f"oom_resume{oom_resumes}", resolve("prompts/out_of_memory.md"),
-                                   remaining, resume=True)
-                continue
-            if seg.oom_killed or (seg.timed_out and agent.cfg.finalize_on_timeout):
-                # out of memory again, or out of time: one turn to give its best answer
+            if seg.timed_out and agent.cfg.finalize_on_timeout:
+                # out of time: one turn to give its best answer
                 await box.kill_agent_processes()
                 finalized = True
-                prompt = "out_of_memory_final.md" if seg.oom_killed else "finalize.md"
-                seg = await invoke("finalize", resolve(f"prompts/{prompt}"), agent.cfg.finalize_timeout_s,
+                seg = await invoke("finalize", resolve("prompts/finalize.md"), agent.cfg.finalize_timeout_s,
                                    resume=True)
                 continue
             if seg.timed_out:
@@ -370,11 +384,14 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
         elif sb.input_mode == "copy" and not sb.keep_input_data:
             remove_inputs(workspace / "data", inputs)
         remove_empty_logs(adir)  # every segment is parsed by now
-        flatten(adir / "agent_session")
+        if agent.flatten_session:
+            flatten(adir / "agent_session")
 
         answer, final_text = final_answer(segments)
         status, err_kind = classify(segments, answer)
         stopped = stopped_by(segments)
+        if status == "out_of_memory":
+            answer = None  # the attempt ended when the agent was killed; it is scored incorrect
         if harness_error:
             status = "harness_error"
         usage_tokens = agent.session_usage(adir / "agent_session") or _sum_usage(segments)
@@ -408,7 +425,7 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
             "tokens": usage_tokens,
             "timed_out": stopped == "timeout",
             "out_of_memory": stopped == "out_of_memory",
-            "finalized_after_timeout": finalized and stopped == "timeout",
+            "finalized_after_timeout": (finalized or any(s.closed_out for s in segments)) and stopped == "timeout",
             "oom_kills": sum(s.oom_kills for s in segments),
             "agent_oom_kills": sum(1 for s in segments if s.oom_killed),
             "nudges": nudges,
@@ -418,12 +435,20 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
             "started_at": started,
             "finished_at": now(),
         }
+        if extra := agent.result_extra(adir / "agent_session", segments):
+            result[agent.name] = extra
         (adir / "trajectory.json").write_text(
             json.dumps({"segments": [asdict(s) for s in recorded]}, ensure_ascii=False), encoding="utf-8"
         )
-        (adir / "transcript.md").write_text(render_transcript(problem.id, attempt, recorded), encoding="utf-8")
+        transcript = (agent.transcript(problem.id, attempt, recorded, adir / "agent_session")
+                      or render_transcript(problem.id, attempt, recorded))
+        (adir / "transcript.md").write_text(transcript, encoding="utf-8")
         result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         scrub_secrets(adir, secret_values())
+        try:
+            agent.compact_session(adir / "agent_session")
+        except OSError:
+            pass
     return result
 
 

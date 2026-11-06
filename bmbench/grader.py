@@ -341,7 +341,11 @@ async def grade_attempt(attempt_dir: Path, problem: Problem, cfg: GraderConfig, 
             grade["judge"][k] += int(res["usage"].get(k) or 0)
 
     # 1) correctness
-    if not answer.strip() and not final_message.strip():
+    if result.get("status") == "out_of_memory":
+        grade.update(correct=False, extracted_answer="", normalized_answer="",
+                     answer_rationale="the agent process was killed for running out of memory: the attempt "
+                                      "ends there and is scored incorrect")
+    elif not answer.strip() and not final_message.strip():
         grade.update(correct=False, extracted_answer="", normalized_answer="",
                      answer_rationale="no answer produced")
     else:
