@@ -148,6 +148,32 @@ def test_incomplete_and_structured_results():
     assert bad.parsed is None  # SHELDON handles a missing parse itself
 
 
+def test_reply_cut_off_mid_tool_call_ends_the_loop_and_is_not_replayed():
+    """The output cap hit while the model was writing a command: SHELDON sees
+    max_tokens (its tool loop stops there, as on its Anthropic path), not a tool call
+    with no command, and the conversation can continue without the half-written call."""
+    half = {**CALL, "arguments": '{"command": "python - <<\'PY\'\\nimport numpy'}
+    client = FakeClient(response([REASONING, half], status="incomplete", reason="max_output_tokens", out=16000),
+                        response([MESSAGE], text="done"))
+    llm = ResponsesLLM(base_url="http://x/v1", api_key="k", usd_per_mtok=PRICES, client=client,
+                       model="gpt-6-luna", effort="high", cache=DiskCache(enabled=False))
+    tool = {"name": "run_shell", "description": "shell",
+            "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}}}
+    ran = []
+
+    async def execute(name, args):
+        ran.append(args)
+        return "ran"
+
+    convo = asyncio.run(llm.converse("test it", tools=[tool], execute=execute, max_iterations=3))
+    assert convo.stopped_by == "max_tokens" and ran == [] and convo.tool_calls == []
+    assert not any(b.get("type") == "tool_use" for m in convo.messages for b in m["content"] if isinstance(b, dict))
+    # session mode: the next turn continues this transcript
+    asyncio.run(llm.converse("next turn", tools=[tool], execute=execute, history=convo.messages))
+    replayed = client.calls[1]["input"]
+    assert not any(i.get("type") in ("function_call", "reasoning") for i in replayed)
+
+
 def test_reasoning_items_replayed_on_the_next_turn():
     """A tool loop through SHELDON's own LLM.converse: the second request carries the
     first reply's raw items (encrypted reasoning included) and the tool output."""

@@ -220,8 +220,14 @@ class ResponsesBackend(Backend):
     def result(self, response: Any, req: dict[str, Any], schema: type[BaseModel] | None) -> LLMResult:
         output = list(getattr(response, "output", None) or [])
         raw = [_dump(item) for item in output]
+        status = getattr(response, "status", "completed")
+        cut = status == "incomplete"
         ref = uuid.uuid4().hex
-        self._items[ref] = raw
+        # A reply cut off by the output cap is reported as SHELDON's Anthropic path reports
+        # it (stop_reason max_tokens, which ends a tool loop), never as a tool call: its last
+        # call's arguments may be half-written. Only its text is replayed, since a call with
+        # no output, or reasoning with no item after it, makes the next turn fail.
+        self._items[ref] = [i for i in raw if i.get("type") == "message"] if cut else raw
         text = getattr(response, "output_text", None)
         if text is None:
             text = "".join(p.get("text", "") for i in raw if i.get("type") == "message"
@@ -232,7 +238,7 @@ class ResponsesBackend(Backend):
         if text:
             content.append({"type": "text", "text": text})
         calls = 0
-        for item in raw:
+        for item in [] if cut else raw:
             if item.get("type") != "function_call":
                 continue
             calls += 1
@@ -242,12 +248,11 @@ class ResponsesBackend(Backend):
                 arguments = {}
             content.append({"type": "tool_use", "id": item.get("call_id"), "name": item.get("name"),
                             "input": arguments if isinstance(arguments, dict) else {"value": arguments}})
-        status = getattr(response, "status", "completed")
-        if calls:
-            stop = "tool_use"
-        elif status == "incomplete":
+        if cut:
             reason = getattr(getattr(response, "incomplete_details", None), "reason", "") or "incomplete"
             stop = "max_tokens" if reason == "max_output_tokens" else str(reason)
+        elif calls:
+            stop = "tool_use"
         elif refusal:
             stop = "refusal"
         else:
