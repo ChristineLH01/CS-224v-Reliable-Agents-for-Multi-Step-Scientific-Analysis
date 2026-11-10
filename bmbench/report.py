@@ -20,7 +20,7 @@ CSV_FIELDS = [
     "problem_id", "attempt", "human_solvable", "status", "score", "correct", "cheated",
     "answer", "normalized_answer", "cost_usd", "num_turns", "agent_seconds",
     "timed_out", "finalized_after_timeout", "out_of_memory", "nudges", "n_tool_calls",
-    "output_tokens", "cost_incomplete", "graded", "rounds",
+    "output_tokens", "cost_incomplete", "graded", "rounds", "stop_reason",
 ]
 
 
@@ -40,6 +40,7 @@ def collect(run_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                                       "out_of_memory", "cost_incomplete")},
             "output_tokens": (r.get("tokens") or {}).get("output_tokens"),
             "rounds": (r.get("sheldon") or {}).get("rounds"),
+            "stop_reason": (r.get("sheldon") or {}).get("stop_reason"),
             "n_tool_calls": sum((r.get("tool_counts") or {}).values()),
             "graded": g is not None,
         }
@@ -94,8 +95,9 @@ def _setup_line(run_dir: Path, n_problems: int, judge: str) -> str:
         params = sh.get("params") or {}
         parallel = (f"≤ {params.get('select_k', 5)} hypotheses tested at once"
                     if params.get("candidate_analysis_concurrent", True) else "one hypothesis tested at a time")
+        adapted = agent.get("adaptations") or []
         details = (f", {params.get('mode', 'staged')} mode, {sh.get('max_rounds', '?')} rounds, {parallel}, "
-                   "Responses API")
+                   "Responses API" + (f", adaptations: {', '.join(adapted)}" if adapted else ""))
     network = "internet limited to each problem's allowed sites" if sb.get("network") == "allowlist" else "open internet"
     return (
         f"**Setup:** BioMysteryBench {(cfg.get('dataset') or {}).get('name', '?')} · "
@@ -146,6 +148,9 @@ def _markdown(run_dir: Path, metrics: dict[str, Any], problems: list[dict[str, A
         if rounds:
             lines += ["", "Rounds reached per attempt: " + ", ".join(
                 f"{r} ({c} attempt{'s' if c != 1 else ''})" for r, c in sorted(rounds.items(), reverse=True))]
+            stops = Counter(str(rec["stop_reason"]).split("=")[0] for rec in every if rec.get("stop_reason"))
+            lines += ["", "Stop reasons: " + ", ".join(
+                f"{r} ({c} attempt{'s' if c != 1 else ''})" for r, c in stops.most_common())]
         if incomplete:
             lines += ["", f"Mean cost is a lower bound: {incomplete} attempt(s) were stopped before reporting their cost."]
 

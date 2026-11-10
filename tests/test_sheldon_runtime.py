@@ -278,3 +278,215 @@ def test_missing_credentials_are_an_auth_error(monkeypatch):
     with pytest.raises(RuntimeError, match="invalid api key"):
         driver.make_llm(cfg, {})
 
+
+
+# -- adapted SHELDON -----------------------------------------------------------------
+
+import inspect  # noqa: E402
+import re  # noqa: E402
+import tempfile  # noqa: E402
+import textwrap  # noqa: E402
+
+from sheldon.core.llm import FakeLLM  # noqa: E402
+from sheldon.methods.sheldon.loop import Sheldon  # noqa: E402
+from sheldon.methods.sheldon.schemas import SUBMIT_SCHEMAS, ObservationDraft, VerdictDraft  # noqa: E402
+from sheldon.methods.sheldon.state import State  # noqa: E402
+
+from bmb_sheldon import selftest as selftest_script  # noqa: E402
+from bmb_sheldon.adapted import ADAPTATIONS, METHOD, early_stop, resolve  # noqa: E402
+from bmb_sheldon.adapted.early_stop import StopCheckOut, gate  # noqa: E402
+from bmb_sheldon.adapted.method import AdaptedSheldon, loop_without_adaptations  # noqa: E402
+
+
+def test_adapted_loop_is_sheldons_own_loop_plus_marked_blocks():
+    ours = loop_without_adaptations(textwrap.dedent(inspect.getsource(AdaptedSheldon._loop)))
+    assert ours == textwrap.dedent(inspect.getsource(Sheldon.run))
+    assert "# >>> adaptation: early_stop" in inspect.getsource(AdaptedSheldon._loop)
+
+
+def test_adaptation_names_resolve_to_an_explicit_ordered_list():
+    assert resolve(None) == resolve([]) == []
+    assert resolve(["all"]) == resolve("all") == list(ADAPTATIONS)
+    assert resolve(["early_stop", "early_stop", " "]) == ["early_stop"]
+    with pytest.raises(ValueError, match="unknown SHELDON adaptation"):
+        resolve(["early-stop"])
+
+
+def test_config_picks_the_adapted_method_only_when_something_is_on(tmp_path):
+    base = {"sheldon": {"model": "gpt-6-luna", "method": "sheldon", "params": {"mode": "session"}}}
+    cfg = driver.build_config(base, tmp_path / "task.json", 60)
+    assert cfg.method == "sheldon" and "adaptations" not in cfg.params
+    cfg = driver.build_config({**base, "adaptations": ["all"]}, tmp_path / "task.json", 60)
+    assert cfg.method == METHOD and cfg.params["adaptations"] == ["early_stop"]
+    with pytest.raises(ValueError, match="method: sheldon"):
+        driver.build_config({"sheldon": {"method": "direct"}, "adaptations": ["early_stop"]}, tmp_path / "t", 60)
+
+
+def case(lead=(3, 0), rivals=((0, 2), (1, 3)), shelved=False) -> State:
+    """h1 the lead, h2.. rivals, each with the given (supporting, refuting) observations;
+    h9 a hypothesis about method that is no answer."""
+    s = State()
+    for i, (sup, ref) in enumerate([lead, *rivals], start=1):
+        h = s.add(f"The answer is candidate {i}.", "", "", 1)
+        s.tested(h, 1)
+        for j in range(sup):
+            s.observe(f"o for h{i} #{j}", "", [], 1, "local", [{"hypothesis": h.id, "relation": "supports", "why": ""}])
+        for j in range(ref):
+            s.observe(f"o against h{i} #{j}", "", [], 1, "local", [{"hypothesis": h.id, "relation": "refutes", "why": ""}])
+    if shelved:
+        s.shelve(s.hypotheses["h1"], "x", 1)
+    s.add("Count the reads with a different tool.", "", "", 1)
+    return s
+
+
+def supports(s: State, hid: str = "h1") -> list[str]:
+    return [o.id for o in s.observations.values() if o.verdicts.get(hid, {}).get("relation") == "supports"]
+
+
+def closed(s: State, **over) -> StopCheckOut:
+    fields = dict(lead="h1", candidate_answer="candidate 1", covers_question=True, support=supports(s)[:2],
+                  rivals=[h for h in s.hypotheses if h not in ("h1", "h4")])
+    return StopCheckOut(**{**fields, **over})
+
+
+def test_gate_passes_a_closed_case():
+    s = case()
+    g = gate(s, closed(s))
+    assert g.passed and not g.failed and g.evidence == {"h1": [3, 0], "h2": [0, 2], "h3": [1, 3]}
+    assert gate(s, closed(s, lead="[H1]", support=[f" {o} " for o in supports(s)])).passed
+    one = case(lead=(1, 0))
+    assert gate(one, closed(one)).passed  # one verified supporting observation is enough
+
+
+@pytest.mark.parametrize(("make", "over", "why"), [
+    (lambda: case(), {"candidate_answer": ""}, "answer: no candidate"),
+    (lambda: case(), {"covers_question": False}, "does not cover"),
+    (lambda: case(), {"lead": "h7"}, "not a hypothesis"),
+    (lambda: case(shelved=True), {}, "is shelved"),
+    (lambda: case(lead=(3, 1)), {}, "1 refuting"),
+    (lambda: case(lead=(0, 0)), {}, "0 verified supporting observation(s) of h1 cited, 1 needed"),
+    (lambda: case(), {"support": ["o4", "o99"]}, "0 verified supporting observation(s)"),
+    (lambda: case(), {"rivals": []}, "no rival hypothesis"),
+    (lambda: case(rivals=((3, 3),)), {"rivals": ["h2"]}, "h2 not ruled out (+3 -3)"),
+    (lambda: case(rivals=((0, 0),)), {"rivals": ["h2"]}, "h2 not ruled out (+0 -0)"),
+    (lambda: case(), {"rivals": ["h1", "h2"]}, "h1 is the lead"),
+    (lambda: case(), {"untested_rivals": ["candidate 7"]}, "untested: candidate 7"),
+    (lambda: case(), {"open_issues": ["the BLAST job is still running"]}, "open: the BLAST job"),
+])
+def test_gate_holds_any_case_that_is_not_closed(make, over, why):
+    s = make()
+    g = gate(s, closed(s, **over))
+    assert not g.passed and any(why in f for f in g.failed), g.failed
+
+
+def test_gate_counts_only_verified_citations():
+    s = case()  # o1-o3 support h1; o4, o5 refute h2
+    g = gate(s, closed(s, support=["o1", "o4", "o2", "o99"]))
+    assert g.passed and g.ignored == ["o4", "o99"]
+
+
+def test_gate_refuses_no_reply():
+    assert not gate(case(), None).passed
+
+
+def test_check_prompt_shows_every_hypothesis_and_the_rounds_summary():
+    s = case(shelved=True)
+    trace = SimpleNamespace(events=[{"kind": "comparative_analysis.done", "round": 1, "summary": "ANI decides it."},
+                                    {"kind": "comparative_analysis.done", "round": 2, "summary": "later"}])
+    prompt = early_stop.render_prompt("Which organism?", s, early_stop.comparative_summary(trace, 1))
+    assert "Which organism?" in prompt.user and "ANI decides it." in prompt.user and "later" not in prompt.user
+    assert all(f"[{h}]" in prompt.user for h in s.hypotheses) and "(shelved" in prompt.user
+    assert "untested_rivals" in prompt.system
+
+
+def scripted_llm(settle: bool) -> FakeLLM:
+    """The selftest's scripted model, with the bacterial hypothesis (h1) supported twice
+    and the human one (h2) refuted, and a stop check that reports a closed case or none."""
+
+    def responder(prompt, schema):
+        if schema is LocalOut:
+            bacterial = "bacterial" in prompt.split("**Hypothesis under test**", 1)[-1][:300]
+            verdict = [VerdictDraft(relation="supports" if bacterial else "refutes", why="scripted")]
+            texts = ["16S matches a bacterium.", "Genome size fits a bacterium."] if bacterial else ["No human reads."]
+            return LocalOut(notes="checked", done=True,
+                            observations=[ObservationDraft(content=t, verdicts=verdict) for t in texts])
+        if schema is StopCheckOut:
+            if not settle:
+                return StopCheckOut()
+            sup = re.findall(r"- \[(o\d+)\] [^\n]*\n  - supports h1:", prompt)
+            return StopCheckOut(lead="h1", candidate_answer="bacteria", covers_question=True, support=sup,
+                                rivals=["h2"])
+        return selftest_script.responder(prompt, schema)
+
+    def tool_responder(prompt, tools):
+        names = {t.get("name") for t in tools}
+        for name, schema in SUBMIT_SCHEMAS.items():
+            if name in names:
+                return {"name": name, "input": responder(prompt, schema).model_dump()}
+        return None
+
+    return FakeLLM(responder=responder, tool_responder=tool_responder, model="gpt-6-luna")
+
+
+def run_scripted(monkeypatch, adaptations, settle):
+    for var in ("SHELDON_RUNS", "SHELDON_DATA", "SHELDON_CACHE"):
+        monkeypatch.setenv(var, os.environ.get(var, ""))
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "workspace"
+        (work / "data").mkdir(parents=True)
+        conf = {"sheldon": {"model": "gpt-6-luna", "effort": "high", "max_rounds": 3, "max_calls": None,
+                            "max_usd": None, "params": {"mode": "session", "rounds": 3, "n_initial": 3,
+                                                        "select_k": 3, "probes": ["run_shell"]}},
+                "adaptations": adaptations, "workdir": str(work), "home": str(Path(tmp) / "home")}
+        out = io.StringIO()
+        result = asyncio.run(driver.run_sheldon("## Question\n\nWhich organism?\n", conf, 300, out,
+                                                llm=scripted_llm(settle)))
+        trace = next(Path(result["run_dir"]).glob("traces/*.jsonl"))
+        events = [json.loads(x) for x in trace.read_text().splitlines()]
+    start = json.loads(out.getvalue().splitlines()[0])
+    return result, events, start
+
+
+def test_early_stop_ends_a_settled_run_after_round_1(monkeypatch):
+    result, events, start = run_scripted(monkeypatch, ["early_stop"], settle=True)
+    assert not result["error"] and result["answer"] == "<answer>selftest-answer</answer>"
+    assert (result["rounds"], result["stop_reason"]) == (1, "settled")
+    assert result["early_stop"] == [{"round": 1, "passed": True, "failed": []}]
+    assert start["adaptations"] == ["early_stop"]
+    check = next(e for e in events if e["kind"] == early_stop.EVENT)
+    assert check["evidence"] == {"h1": [2, 0], "h2": [0, 1]} and check["check"]["candidate_answer"] == "bacteria"
+    kinds = [e["kind"] for e in events]
+    assert kinds.index("round.done") < kinds.index(early_stop.EVENT) < kinds.index("finalize")
+    assert any(e["kind"] == "llm" and e.get("tag") == early_stop.TAG for e in events)
+
+
+def test_a_check_that_does_not_pass_changes_nothing(monkeypatch):
+    result, events, _ = run_scripted(monkeypatch, ["early_stop"], settle=False)
+    assert (result["rounds"], result["stop_reason"]) == (2, "nothing_to_test")
+    assert [c["round"] for c in result["early_stop"]] == [1] and not result["early_stop"][0]["passed"]
+    base, base_events, start = run_scripted(monkeypatch, [], settle=True)
+    assert (base["rounds"], base["stop_reason"]) == (2, "nothing_to_test") and "early_stop" not in base
+    assert start["adaptations"] == [] and not any(e["kind"] == early_stop.EVENT for e in base_events)
+
+
+def test_a_failing_check_call_is_a_check_that_did_not_pass():
+    async def broken(*_a, **_k):
+        raise RuntimeError("proxy down")
+
+    logged = []
+    run = SimpleNamespace(round=1, task=SimpleNamespace(question="q"), state=case(),
+                          ctx=SimpleNamespace(llm=SimpleNamespace(complete=broken), budget=None,
+                                              trace=SimpleNamespace(events=[], log=lambda k, **f: logged.append(f))))
+    rec = asyncio.run(early_stop.check(run))
+    assert rec["passed"] is False and "proxy down" in rec["failed"][0] and logged[0]["passed"] is False
+
+
+def test_selftest_checks_early_stop_when_it_is_on(monkeypatch):
+    for var in ("SHELDON_RUNS", "SHELDON_DATA", "SHELDON_CACHE"):
+        monkeypatch.setenv(var, os.environ.get(var, ""))
+    conf = {"sheldon": {"model": "gpt-6-luna", "effort": "high", "max_rounds": 3, "max_calls": None,
+                        "max_usd": None, "params": {"mode": "session", "rounds": 3, "n_initial": 3, "select_k": 3,
+                                                    "probes": ["run_shell"]}}, "adaptations": ["all"]}
+    out = io.StringIO()
+    assert driver.selftest(conf, out)
+    assert json.loads(out.getvalue().splitlines()[-1])["checks"]["early stop checked"] is True

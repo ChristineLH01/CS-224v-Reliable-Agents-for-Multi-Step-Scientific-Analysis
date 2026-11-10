@@ -17,6 +17,11 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+#: bmbench's changes to SHELDON, in the order they were added; `all` means these. The
+#: same names as bmb_sheldon.adapted.ADAPTATIONS (the runtime's registry; a test keeps
+#: the two equal).
+SHELDON_ADAPTATIONS = ("early_stop",)
+
 #: Auth variables forwarded (by name, never by value on a command line) into the sandbox.
 SECRET_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
 #: The OpenAI-compatible LiteLLM proxy: the Codex agent's model provider (the key is passed
@@ -64,6 +69,10 @@ class AgentConfig:
     # max_tokens, trace_prompts, params, ...), passed through unchanged; see
     # configs/sheldon_preview.yaml. `model` and `effort` come from above.
     sheldon: dict[str, Any] = field(default_factory=dict)
+    # SHELDON only: bmbench's changes to it, by name (SHELDON_ADAPTATIONS), or [all] for
+    # every one. Empty: baseline SHELDON. Resolved to the explicit list when the config is
+    # loaded, so the run folder and its config.yaml name exactly what ran.
+    adaptations: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -133,7 +142,8 @@ class RunConfig:
 def auto_run_name(cfg: RunConfig) -> str:
     """<dataset>_<agent>_<model>_<effort>_timeout-<limit>_<n>-attempts, e.g.
     preview_claude-code_opus-5-5_high_timeout-1h_3-attempts: a change to any of these
-    settings starts a new run folder instead of mixing into an old one."""
+    settings starts a new run folder instead of mixing into an old one. SHELDON adds its
+    round budget and any adaptations: ..._3-rounds_early-stop_timeout-1h_3-attempts."""
     a, t = cfg.agent, cfg.sandbox.timeout_s
     limit = f"{t // 3600}h" if t % 3600 == 0 else f"{round(t / 60)}min"
     attempts = f"{cfg.n_attempts}-attempt" + ("" if cfg.n_attempts == 1 else "s")
@@ -142,7 +152,24 @@ def auto_run_name(cfg: RunConfig) -> str:
     if a.type == "sheldon":  # its round budget changes what it does as much as the time limit
         rounds = (a.sheldon or {}).get("max_rounds")
         parts.append(f"{rounds}-rounds" if rounds else "no-round-cap")
+        adaptations = resolve_adaptations(a.adaptations)
+        if adaptations:  # every change named, so a later [all] with more changes gets its own folder
+            parts.append("+".join(n.replace("_", "-") for n in adaptations))
     return "_".join([*parts, f"timeout-{limit}", attempts])
+
+
+def resolve_adaptations(names: Any) -> list[str]:
+    """The explicit list `agent.adaptations` means: `all` expanded, unknown names refused,
+    duplicates dropped, in the order of SHELDON_ADAPTATIONS."""
+    if isinstance(names, str):
+        names = [names]
+    given = [str(n).strip() for n in (names or []) if str(n).strip()]
+    unknown = [n for n in given if n != "all" and n not in SHELDON_ADAPTATIONS]
+    if unknown:
+        raise ValueError(f"unknown SHELDON adaptation(s): {', '.join(unknown)}; "
+                         f"known: {', '.join(SHELDON_ADAPTATIONS)} (or all)")
+    wanted = set(SHELDON_ADAPTATIONS) if "all" in given else set(given)
+    return [n for n in SHELDON_ADAPTATIONS if n in wanted]
 
 
 def resolve(path: str | Path) -> Path:
@@ -202,6 +229,11 @@ def load_config(path: str | Path | None, overrides: list[str] | None = None) -> 
         with open(resolve(path), encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     data = apply_overrides(data, overrides or [])
+    agent = data.get("agent")
+    if isinstance(agent, dict) and agent.get("adaptations"):
+        if agent.get("type", AgentConfig.type) != "sheldon":
+            raise ValueError("agent.adaptations is for the SHELDON agent only")
+        agent["adaptations"] = resolve_adaptations(agent["adaptations"])
     return _build(RunConfig, data, "")
 
 

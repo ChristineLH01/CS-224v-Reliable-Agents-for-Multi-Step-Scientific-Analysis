@@ -39,7 +39,7 @@ TIMEOUT_EXIT_CODES = (124, 137)
 #: SHELDON's stage events worth a line in the transcript and the trajectory
 STAGE_EVENTS = ("plan", "merge.done", "explore.done", "select.done", "candidate_analysis.revision",
                 "candidate_analysis.done", "comparative_analysis.done", "exploit.done", "round.done",
-                "finalize", "budget.stop", "error")
+                "early_stop.check", "finalize", "budget.stop", "error")
 
 
 class SheldonAgent(Agent):
@@ -81,8 +81,8 @@ class SheldonAgent(Agent):
         return [PYTHON, "-m", "bmb_sheldon.driver", "--version"]
 
     def env(self) -> dict[str, str]:
-        conf = {"sheldon": self.sheldon_config(), "usd_per_mtok": self.cfg.usd_per_mtok, "workdir": WORKDIR,
-                "home": HOME}
+        conf = {"sheldon": self.sheldon_config(), "usd_per_mtok": self.cfg.usd_per_mtok,
+                "adaptations": list(self.cfg.adaptations), "workdir": WORKDIR, "home": HOME}
         env = {"BMB_SHELDON_CONFIG": json.dumps(conf)}
         try:
             env["LITELLM_BASE_URL"] = litellm_base_url()
@@ -181,7 +181,10 @@ class SheldonAgent(Agent):
         extra = {k: info.get(k) for k in ("rounds", "stop_reason", "hypotheses", "n_hypotheses", "n_observations",
                                           "time_limit_hit", "seconds_after_limit", "commands_killed")}
         start = next((s.info.get("start") for s in segments if s.info.get("start")), None) or {}
-        extra.update(mode=start.get("mode"), sheldon_commit=start.get("sheldon_commit"))
+        extra.update(mode=start.get("mode"), sheldon_commit=start.get("sheldon_commit"),
+                     adaptations=start.get("adaptations") or [])
+        if "early_stop" in info:
+            extra["early_stop"] = info["early_stop"]
         found = traces(session_root)
         if found:
             extra.update(Recorded(found[0]).command_stats())
@@ -244,7 +247,8 @@ def stage_name(tag: str) -> str:
         hyp = parts[1] if len(parts) > 1 else "?"
         it = f" · iteration {parts[2]}" if len(parts) > 2 else ""
         return f"candidate analysis · {hyp}{it}"
-    return {"merge": "merge regions", "comparative_analysis": "comparative analysis"}.get(tag, tag)
+    return {"merge": "merge regions", "comparative_analysis": "comparative analysis",
+            "early_stop": "early stop check"}.get(tag, tag)
 
 
 class Recorded:
@@ -295,6 +299,8 @@ class Recorded:
             if kind == "llm":
                 if tag == "plan":
                     rnd = 0
+                elif tag == "early_stop":  # asked after its round's round.done
+                    rnd = rounds_done
                 uses = []
                 for tu in e.get("tool_use") or []:
                     name = tu.get("name") or ""
@@ -306,7 +312,8 @@ class Recorded:
             elif kind in STAGE_EVENTS or str(kind).endswith(".recovered"):
                 if kind == "plan":
                     rnd = 0
-                out.append({"kind": kind, "round": e.get("round", rnd) if kind == "round.done" else rnd, "event": e})
+                by_event = kind in ("round.done", "early_stop.check")
+                out.append({"kind": kind, "round": e.get("round", rnd) if by_event else rnd, "event": e})
                 if kind == "round.done":
                     rounds_done = int(e.get("round") or rounds_done + 1)
         return out
@@ -364,7 +371,9 @@ class Recorded:
         start = next((s.info.get("start") for s in segments if s.info.get("start")), {}) or {}
         lines = [f"# Transcript: {problem_id} / attempt {attempt} (SHELDON)", ""]
         lines += [f"_SHELDON {str(start.get('sheldon_commit', ''))[:7]} · `{start.get('model', '?')}` effort "
-                  f"`{start.get('effort', '?')}` · {start.get('mode', '?')} mode · rounds {info.get('rounds', '?')} "
+                  f"`{start.get('effort', '?')}` · {start.get('mode', '?')} mode"
+                  + (f" · adaptations: {', '.join(start['adaptations'])}" if start.get("adaptations") else "")
+                  + f" · rounds {info.get('rounds', '?')} "
                   f"(stop: {info.get('stop_reason') or '?'}) · {sum(1 for c in calls if c['kind'] == 'llm')} model calls · "
                   f"{len(self.retrievals)} commands" + (" · **time limit hit**" if info.get("time_limit_hit") else "")
                   + "_", ""]
@@ -464,6 +473,12 @@ def _event_line(kind: str, e: dict[str, Any]) -> str:
     if kind == "round.done":
         return (f"round {e.get('round')} done: tested {ids('tested')}; shelved {ids('shelved')}; "
                 f"{e.get('observations', 0)} observations")
+    if kind == "early_stop.check":
+        if e.get("passed"):
+            answer = str((e.get("check") or {}).get("candidate_answer") or "")[:200]
+            return f"early stop after round {e.get('round')}: settled on {answer!r}"
+        return (f"early stop check after round {e.get('round')}: continue ("
+                + "; ".join(str(f) for f in e.get("failed") or [])[:400] + ")")
     if kind == "finalize":
         return f"finalize: answer {str(e.get('answer'))[:200]!r} (from {e.get('source')})"
     if kind == "merge.done":

@@ -1,6 +1,6 @@
 # Reliable Agents for Multi-Step Scientific Analysis: BioMysteryBench
 
-`bmbench` is an evaluation harness that runs coding agents, unchanged, on
+`bmbench` is an evaluation harness that runs coding agents on
 [BioMysteryBench](https://www.anthropic.com/research/Evaluating-Claude-For-Bioinformatics-With-BioMysteryBench).
 It makes several attempts at each problem and measures **accuracy** and **consistency**.
 
@@ -14,9 +14,10 @@ these RNA-seq samples?". The answers are short, but reaching them takes many ana
 | full | 90 (155 GB zipped) | gated on Hugging Face |
 
 The harness runs the **Claude Code CLI** (`claude -p`), the **Codex CLI** (`codex exec`) and
-**SHELDON** (the [hypothesis-driven reasoning harness](https://github.com/stanford-oval/sheldon),
-unmodified; see [SHELDON](#sheldon)). The sandbox, prompt, judge and metrics do not depend on the
-agent, so the agents are compared under the same conditions.
+**SHELDON** (the [hypothesis-driven reasoning harness](https://github.com/stanford-oval/sheldon);
+see [SHELDON](#sheldon)), all unmodified, and **adapted SHELDON**, SHELDON with our changes
+switched on (see [Adapted SHELDON](#adapted-sheldon)). The sandbox, prompt, judge and metrics do
+not depend on the agent, so the agents are compared under the same conditions.
 
 **Terms:** a *problem* is one BioMysteryBench item (its question plus its data); an *attempt* is
 one independent run of the agent on a problem, in a fresh sandbox.
@@ -25,7 +26,7 @@ one independent run of the agent on a problem, in a fresh sandbox.
 
 | Part | Setting |
 |---|---|
-| Agents | Each runs headless and unchanged, with its own tools, context management and subagents, and web search off. **Claude Code:** `claude-opus-5-5`, effort `high`, on a Claude subscription. **Codex:** `gpt-6.1-sol`, effort `high`, through the LiteLLM proxy. **SHELDON:** `gpt-6-luna`, effort `high`, through the LiteLLM proxy, 3 rounds (details in [SHELDON](#sheldon)). |
+| Agents | Each runs headless and unchanged (except adapted SHELDON), with its own tools, context management and subagents, and web search off (internet only through the agents' own commands). **Claude Code:** `claude-opus-5-5`, effort `high`, on a Claude subscription. **Codex:** `gpt-6.1-sol`, effort `high`, through the LiteLLM proxy. **SHELDON:** `gpt-6-luna`, effort `high`, through the LiteLLM proxy, 3 rounds (details in [SHELDON](#sheldon)). **Adapted SHELDON:** the same, with the adaptations on ([Adapted SHELDON](#adapted-sheldon)). |
 | Sandbox | A fresh Docker container per attempt, with standard bioinformatics tools (samtools, BLAST+, HOMER, DESeq2, scanpy, …). The agent can install more with conda or pip. Only the problem's data is mounted; the answer key never is. |
 | Network | Through a proxy that only allows the problem's listed sites (NCBI, Ensembl, UCSC, conda, PyPI, …) and the model API. |
 | Limits | 1 hour, 4 CPUs and 3.5 GB RAM per attempt, for the preview and the full set alike. At the time limit the agent's running work is stopped, and it then has up to 5 minutes to give its best answer (one resumed turn for Claude Code and Codex; SHELDON's own finalize stage). A command that runs out of memory is killed, not the agent, which sees the error and carries on. If the agent process itself is killed for memory, the attempt ends there and is scored incorrect (*out of memory*). |
@@ -71,6 +72,7 @@ uv run bmbench doctor --auth-check -c configs/sheldon_preview.yaml       # the s
 uv run bmbench run -c configs/claude_code_preview.yaml   # Claude Code: 5 problems × 3 attempts
 uv run bmbench run -c configs/codex_preview.yaml         # Codex: the same
 uv run bmbench run -c configs/sheldon_preview.yaml       # SHELDON: the same
+uv run bmbench run -c configs/sheldon_adapted_preview.yaml   # adapted SHELDON: every adaptation on (see Adapted SHELDON)
 uv run bmbench run -c configs/claude_code_full.yaml      # 90 problems × 3 attempts (codex_full.yaml, sheldon_full.yaml)
 
 uv run bmbench run   -c <config> --set agent.model=<model> --set agent.effort=<effort>  # another agent model / effort
@@ -99,7 +101,8 @@ uv run bmbench show   -r runs/<run_name> <problem> <k>   # one attempt (--full: 
 
 The run name is built from the settings, `<preview|full>_<agent>_<model>_<effort>_timeout-<limit>_<n>-attempts`,
 e.g. `preview_codex_gpt-6-1-sol_high_timeout-1h_3-attempts`, so runs with different settings never
-share a folder. SHELDON's names add its round budget: `preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts`.
+share a folder. SHELDON's names add its round budget: `preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts`,
+and any adaptations after it (`..._3-rounds_early-stop_timeout-1h_3-attempts`).
 
 | File | Content |
 |---|---|
@@ -156,6 +159,22 @@ block: rounds, stop reason, hypotheses and observations, whether the time limit 
 commands repeated earlier work. SHELDON's own records (trace with every prompt, retrievals) are in
 `agent_session/sheldon/runs/`, the trace gzipped.
 
+### Adapted SHELDON
+
+Our changes to SHELDON, each switched on by name in `agent.adaptations`. With none on (the
+default) SHELDON runs unmodified, as above; with any on, the driver runs
+`bmb_sheldon/adapted/`, SHELDON's own run loop with one marked hook per change (a test keeps the
+copy equal to SHELDON's). `[all]` turns on every adaptation, and the run name lists them.
+
+```bash
+uv run bmbench run -c configs/sheldon_preview.yaml --set 'agent.adaptations=[early_stop]'  # one adaptation
+uv run bmbench run -c configs/sheldon_adapted_preview.yaml                                 # all (sheldon_adapted_full.yaml: 90 problems)
+```
+
+| Adaptation | What it does |
+|---|---|
+| `early_stop` | Ends the run after a round early, before the round cap, once the settled case is closed, then finalizes as usual (stop reason `settled`). One extra tool-less call reads the record; fixed rules decide, from SHELDON's own verdicts: the lead answers the whole question, has at least 1 supporting and no refuting observation, there is at least one rival hypothesis and each has more refuting than supporting observations, and no untested rival or open issue is left. `scripts/replay_early_stop.py` replays the check on a finished run. |
+
 ## Repository layout
 
 ```
@@ -165,7 +184,8 @@ bmbench/            the harness
   dataset.py          download and load BioMysteryBench
   sandbox.py          Docker container, network and proxy per attempt
   agents/             agent adapters (claude_code.py, codex.py, sheldon.py)
-    sheldon_runtime/    bmb_sheldon: SHELDON's benchmark adapter, transport and driver (runs in the sandbox)
+    sheldon_runtime/    bmb_sheldon: SHELDON's benchmark adapter, transport and driver (runs in the sandbox);
+                        adapted/: the adaptations
   runner.py           runs the attempts
   trajectory.py       parses the agent's output into steps and transcripts
   grader.py           the judge: answer check and cheating audit
@@ -173,6 +193,7 @@ bmbench/            the harness
 configs/            run settings per agent, for the preview and the full set
 prompts/            problem prompt, timeout and nudge messages, judge prompts
 docker/             sandbox image (tools, Claude Code, Codex, SHELDON) and proxy image
+scripts/            replay_early_stop.py: the early-stop check on a finished SHELDON run
 tests/              unit tests (uv run --group dev --group sheldon pytest)
 data/, runs/        downloaded benchmark and run outputs (not in git)
 ```

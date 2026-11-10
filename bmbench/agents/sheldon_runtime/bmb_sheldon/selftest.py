@@ -4,7 +4,8 @@ SHELDON ships `FakeLLM` for exactly this ("a wiring bug caught here is free"). T
 script drives it through one real round on a BioMysteryBench-shaped task: plan,
 explore (two hypotheses), a candidate analysis per hypothesis that runs one real
 `run_shell` command in the workspace, comparative analysis, exploit, then a second
-round with nothing new (the loop stops on its own rule), and finalize.
+round with nothing new (the loop stops on its own rule), and finalize. With the
+`early_stop` adaptation on, its check runs after round 1 and does not pass.
 """
 
 from __future__ import annotations
@@ -28,6 +29,8 @@ from sheldon.methods.sheldon.schemas import (
     SelectOut,
     VerdictDraft,
 )
+
+from bmb_sheldon.adapted.early_stop import StopCheckOut
 
 MARK = "BMB_SELFTEST_MARK"
 ANSWER = "<answer>selftest-answer</answer>"
@@ -70,6 +73,8 @@ def responder(prompt: str, schema: Any) -> Any:
         return ReviseOut()
     if schema is FinalOut:
         return FinalOut(answer=ANSWER, confidence=0.5)
+    if schema is StopCheckOut:
+        return StopCheckOut(notes="selftest: no candidate answer yet")
     return "ok"
 
 

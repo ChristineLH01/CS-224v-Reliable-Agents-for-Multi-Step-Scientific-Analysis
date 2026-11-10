@@ -2,7 +2,8 @@
 
     stdin    the problem prompt (prompts/problem.md, rendered by bmbench)
     env      BMB_SHELDON_CONFIG  JSON: {"sheldon": <SHELDON Config fields>, "usd_per_mtok": [...],
-                                       "workdir": "/workspace", "home": "/home/agent/.sheldon"}
+                                       "adaptations": [...], "workdir": "/workspace",
+                                       "home": "/home/agent/.sheldon"}
              LITELLM_BASE_URL, LITELLM_API_KEY   the model endpoint (the key passed by name)
     argv     --time-limit S   the attempt's limit: SHELDON's `max_seconds`, and the moment
                               its running commands are stopped (see watchdog.py)
@@ -12,7 +13,9 @@
 
 SHELDON runs through its own `run_experiment`, unmodified; this module only builds
 its config, hands it the Responses transport as `llm=`, watches the clock, and
-reports what SHELDON's `predictions.jsonl` says.
+reports what SHELDON's `predictions.jsonl` says. With `adaptations` empty (the
+baseline) it runs SHELDON's own method; with any named, the adapted method in
+bmb_sheldon/adapted, which is SHELDON's run loop with those changes switched on.
 """
 
 from __future__ import annotations
@@ -65,10 +68,18 @@ def build_config(conf: dict[str, Any], task_file: Path, max_seconds: float) -> A
 
     from bmb_sheldon.benchmark import NAME  # noqa: PLC0415
 
+    from bmb_sheldon.adapted import METHOD, resolve  # noqa: PLC0415
+
     fields = {k: v for k, v in dict(conf.get("sheldon") or {}).items() if k not in FIXED}
     params = dict(fields.pop("params", None) or {})
     params["probes"] = shell_probes(params.get("probes", ["run_shell"]), conf.get("workdir") or "/workspace")
     params["benchmark_opts"] = {**(params.get("benchmark_opts") or {}), "task_file": str(task_file)}
+    adaptations = resolve(conf.get("adaptations"))
+    if adaptations:
+        if fields.get("method", "sheldon") != "sheldon":
+            raise ValueError(f"adaptations change SHELDON's own method (method: sheldon), not {fields['method']!r}")
+        fields["method"] = METHOD
+        params["adaptations"] = adaptations
     return Config(**fields, params=params, benchmark=NAME, split="attempt", limit=None, tasks="", seed=0,
                   concurrency=1, cache=False, resume=False, tag="bmbench", max_seconds=max_seconds)
 
@@ -113,6 +124,7 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
                       task_id: str = "problem") -> dict[str, Any]:
     """Run one attempt and return (and print) the result line."""
     from bmb_sheldon import benchmark as _registers  # noqa: F401,PLC0415
+    from bmb_sheldon.adapted import method as _registers_method  # noqa: F401,PLC0415
     from bmb_sheldon.watchdog import TimeLimit  # noqa: PLC0415
 
     quiet_stream_shutdown(asyncio.get_running_loop())
@@ -134,7 +146,7 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
     llm = llm or make_llm(cfg, conf)
     emit(out, "start", sheldon_commit=SHELDON_COMMIT, runtime=__version__, run_id=cfg.run_id, model=cfg.model,
          effort=cfg.effort, mode=cfg.params.get("mode", "staged"), max_rounds=cfg.max_rounds,
-         time_limit_s=time_limit_s)
+         adaptations=cfg.params.get("adaptations", []), time_limit_s=time_limit_s)
     limit = TimeLimit(deadline).start()
     error = ""
     try:
@@ -151,7 +163,8 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
                 await llm.aclose()
     rows = list(read_jsonl(run_dir(cfg) / "predictions.jsonl")) if (run_dir(cfg) / "predictions.jsonl").exists() else []
     pred = rows[-1] if rows else {}
-    stop = str((pred.get("extra") or {}).get("stop_reason") or "")
+    extra = pred.get("extra") or {}
+    stop = str(extra.get("stop_reason") or "")
     answer = pred.get("answer")
     result = {
         "answer": answer if isinstance(answer, str) else ("" if answer is None else json.dumps(answer)),
@@ -167,6 +180,8 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
         "run_dir": str(run_dir(cfg)),
         **summarize_belief(pred.get("belief")),
     }
+    if "early_stop" in extra:  # one entry per check: {round, passed, failed}
+        result["early_stop"] = extra["early_stop"]
     emit(out, "result", **result)
     return result
 
@@ -237,6 +252,10 @@ def selftest(conf: dict[str, Any], out: Any) -> bool:
             "rounds": result["rounds"] >= 1,
             "trace written": bool(list(Path(result["run_dir"]).glob("traces/*.jsonl"))),
         }
+        from bmb_sheldon.adapted import resolve  # noqa: PLC0415
+
+        if "early_stop" in resolve(conf.get("adaptations")):  # checked after round 1; round 2 tests nothing
+            checks["early stop checked"] = [c.get("round") for c in result.get("early_stop") or []] == [1]
         if Path("/etc/profile.d/00-oom-first.sh").exists():  # in the sandbox image
             checks["commands first in line for the OOM killer"] = any(
                 "oom_score_adj=1000" in str(o.get("summary")) for o in ran)

@@ -238,3 +238,53 @@ def test_no_nudge_for_an_empty_answer(tmp_path, monkeypatch):
     empty = {"type": "result", "answer": "", "error": "", "rounds": 3, "usage": {}}
     result, box = _attempt(tmp_path, monkeypatch, [(0, 1200.0, [START, empty])])
     assert len(box.calls) == 1 and result["status"] == "no_answer" and result["nudges"] == 0
+
+
+def test_adaptation_names_match_the_runtime_registry():
+    import importlib.util  # noqa: PLC0415
+
+    from bmbench.config import SHELDON_ADAPTATIONS  # noqa: PLC0415
+
+    path = ROOT / "bmbench/agents/sheldon_runtime/bmb_sheldon/adapted/__init__.py"
+    spec = importlib.util.spec_from_file_location("bmb_adapted_names", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # imports nothing from SHELDON
+    assert mod.ADAPTATIONS == SHELDON_ADAPTATIONS
+    assert mod.resolve(["all"]) == list(SHELDON_ADAPTATIONS)
+
+
+def test_adaptations_resolve_into_the_run_name_and_the_sandbox_config():
+    base = load_config("configs/sheldon_preview.yaml")
+    assert base.agent.adaptations == [] and "early-stop" not in base.run_name
+    one = load_config("configs/sheldon_preview.yaml", ["agent.adaptations=[early_stop]"])
+    whole = load_config("configs/sheldon_adapted_preview.yaml")
+    assert one.agent.adaptations == whole.agent.adaptations == ["early_stop"]
+    assert whole.run_name == "preview_sheldon_gpt-6-luna_high_3-rounds_early-stop_timeout-1h_3-attempts"
+    assert one.run_name == whole.run_name
+    assert load_config("configs/sheldon_adapted_full.yaml").run_name.startswith("full_sheldon_gpt-6-luna_high_3-rounds_early-stop_")
+    conf = json.loads(make_agent(whole.agent).env()["BMB_SHELDON_CONFIG"])
+    assert conf["adaptations"] == ["early_stop"]
+    assert json.loads(agent().env()["BMB_SHELDON_CONFIG"])["adaptations"] == []
+    with pytest.raises(ValueError, match="unknown SHELDON adaptation"):
+        load_config("configs/sheldon_preview.yaml", ["agent.adaptations=[early-stop]"])
+    with pytest.raises(ValueError, match="SHELDON agent only"):
+        load_config("configs/codex_preview.yaml", ["agent.adaptations=[early_stop]"])
+
+
+def test_adapted_configs_differ_from_the_baseline_only_in_adaptations():
+    import yaml  # noqa: PLC0415
+
+    for kind in ("preview", "full"):
+        base = yaml.safe_load((ROOT / f"configs/sheldon_{kind}.yaml").read_text())
+        adapted = yaml.safe_load((ROOT / f"configs/sheldon_adapted_{kind}.yaml").read_text())
+        assert adapted["agent"].pop("adaptations") == ["all"]
+        assert adapted == base
+
+
+def test_early_stop_checks_in_the_transcript():
+    from bmbench.agents.sheldon import _event_line  # noqa: PLC0415
+
+    held = {"round": 1, "passed": False, "failed": ["open: BLAST pending"], "check": {"candidate_answer": "x"}}
+    passed = {"round": 1, "passed": True, "failed": [], "check": {"candidate_answer": "Homo sapiens"}}
+    assert _event_line("early_stop.check", held) == "early stop check after round 1: continue (open: BLAST pending)"
+    assert _event_line("early_stop.check", passed) == "early stop after round 1: settled on 'Homo sapiens'"
