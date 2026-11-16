@@ -317,7 +317,7 @@ def test_config_picks_the_adapted_method_only_when_something_is_on(tmp_path):
     cfg = driver.build_config(base, tmp_path / "task.json", 60)
     assert cfg.method == "sheldon" and "adaptations" not in cfg.params
     cfg = driver.build_config({**base, "adaptations": ["all"]}, tmp_path / "task.json", 60)
-    assert cfg.method == METHOD and cfg.params["adaptations"] == ["early_stop"]
+    assert cfg.method == METHOD and cfg.params["adaptations"] == list(ADAPTATIONS)
     with pytest.raises(ValueError, match="method: sheldon"):
         driver.build_config({"sheldon": {"method": "direct"}, "adaptations": ["early_stop"]}, tmp_path / "t", 60)
 

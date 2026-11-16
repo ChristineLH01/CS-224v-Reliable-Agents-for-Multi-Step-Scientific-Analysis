@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: bmbench's changes to SHELDON, in the order they were added; `all` means these. The
 #: same names as bmb_sheldon.adapted.ADAPTATIONS (the runtime's registry; a test keeps
 #: the two equal).
-SHELDON_ADAPTATIONS = ("early_stop",)
+SHELDON_ADAPTATIONS = ("early_stop", "shared_analysis_state")
 
 #: Auth variables forwarded (by name, never by value on a command line) into the sandbox.
 SECRET_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")

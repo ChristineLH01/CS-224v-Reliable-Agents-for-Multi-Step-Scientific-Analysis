@@ -7,7 +7,7 @@ Nothing here edits SHELDON. Three pieces plug into it through its own extension 
   driver.py      the command the sandbox runs: one problem, the time limit, the result line
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 #: The SHELDON commit this runtime is written against and the image installs.
 SHELDON_COMMIT = "7fbf027d1fb414443612d4ad2661b396c8352cd3"

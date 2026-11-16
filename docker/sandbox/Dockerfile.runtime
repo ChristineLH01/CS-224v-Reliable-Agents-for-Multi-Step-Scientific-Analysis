@@ -1,0 +1,9 @@
+# Update only bmbench's SHELDON runtime, retaining the exact evaluation image
+# dependencies. Tag the original image before building; no package reinstall.
+ARG BASE_IMAGE=bmbench-sandbox:tenq-v1
+FROM ${BASE_IMAGE}
+USER root
+COPY bmb_sheldon /opt/bmb-sheldon/bmb_sheldon
+RUN chmod -R a+rX /opt/bmb-sheldon
+USER agent
+RUN /opt/sheldon/.venv/bin/python -m bmb_sheldon.driver --version

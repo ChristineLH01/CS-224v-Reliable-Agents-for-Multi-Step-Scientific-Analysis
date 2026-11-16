@@ -8,6 +8,7 @@ package.
   method.py       the adapted method: SHELDON's run loop, copied verbatim, with one marked
                   hook per change
   early_stop.py   `early_stop`: end the run at a round boundary once the case is closed
+  shared_analysis_state.py: attempt-local ledger, handoffs and private test directories
 
 This module imports nothing from SHELDON, so the registry can be read without it.
 bmbench keeps its own copy of the names (bmbench.config.SHELDON_ADAPTATIONS); a test
@@ -19,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 #: Every change implemented so far, in the order they were added. `all` means these.
-ADAPTATIONS = ("early_stop",)
+ADAPTATIONS = ("early_stop", "shared_analysis_state")
 #: The SHELDON method name the adapted method is registered under.
 METHOD = "sheldon_adapted"
 

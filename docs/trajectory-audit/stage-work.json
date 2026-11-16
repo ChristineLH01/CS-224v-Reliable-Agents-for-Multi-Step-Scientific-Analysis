@@ -1,0 +1,1852 @@
+{
+  "summary": {
+    "early_stop_only": {
+      "n_attempts": 30,
+      "totals": {
+        "Propose and select": {
+          "shell": 361,
+          "hypotheses": 270,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 4514,
+          "hypotheses": 51,
+          "observations": 1162
+        },
+        "Compare and revise": {
+          "shell": 562,
+          "hypotheses": 133,
+          "observations": 228
+        },
+        "Finalize": {
+          "shell": 9,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      },
+      "means": {
+        "Propose and select": {
+          "shell": 12.033333333333333,
+          "hypotheses": 9.0,
+          "observations": 0.0
+        },
+        "Test": {
+          "shell": 150.46666666666667,
+          "hypotheses": 1.7,
+          "observations": 38.733333333333334
+        },
+        "Compare and revise": {
+          "shell": 18.733333333333334,
+          "hypotheses": 4.433333333333334,
+          "observations": 7.6
+        },
+        "Finalize": {
+          "shell": 0.3,
+          "hypotheses": 0.0,
+          "observations": 0.0
+        }
+      },
+      "shell_shares": {
+        "Propose and select": 0.06628718325376423,
+        "Test": 0.8288652221814176,
+        "Compare and revise": 0.10319500550863019,
+        "Finalize": 0.0016525890561880279
+      }
+    },
+    "shared_state": {
+      "n_attempts": 30,
+      "totals": {
+        "Propose and select": {
+          "shell": 338,
+          "hypotheses": 252,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 3739,
+          "hypotheses": 63,
+          "observations": 1094
+        },
+        "Compare and revise": {
+          "shell": 397,
+          "hypotheses": 142,
+          "observations": 305
+        },
+        "Finalize": {
+          "shell": 25,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      },
+      "means": {
+        "Propose and select": {
+          "shell": 11.266666666666667,
+          "hypotheses": 8.4,
+          "observations": 0.0
+        },
+        "Test": {
+          "shell": 124.63333333333334,
+          "hypotheses": 2.1,
+          "observations": 36.46666666666667
+        },
+        "Compare and revise": {
+          "shell": 13.233333333333333,
+          "hypotheses": 4.733333333333333,
+          "observations": 10.166666666666666
+        },
+        "Finalize": {
+          "shell": 0.8333333333333334,
+          "hypotheses": 0.0,
+          "observations": 0.0
+        }
+      },
+      "shell_shares": {
+        "Propose and select": 0.07512780617915092,
+        "Test": 0.8310735719048677,
+        "Compare and revise": 0.08824183151811514,
+        "Finalize": 0.005556790397866192
+      }
+    }
+  },
+  "attempts": [
+    {
+      "version": "early_stop_only",
+      "problem": "hb002",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb002/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 6,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 126,
+          "hypotheses": 0,
+          "observations": 37
+        },
+        "Compare and revise": {
+          "shell": 20,
+          "hypotheses": 3,
+          "observations": 9
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb002",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb002/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 14,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 155,
+          "hypotheses": 4,
+          "observations": 41
+        },
+        "Compare and revise": {
+          "shell": 15,
+          "hypotheses": 3,
+          "observations": 9
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb002",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb002/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 7,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 146,
+          "hypotheses": 2,
+          "observations": 36
+        },
+        "Compare and revise": {
+          "shell": 12,
+          "hypotheses": 3,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb010",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb010/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 6,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 116,
+          "hypotheses": 3,
+          "observations": 42
+        },
+        "Compare and revise": {
+          "shell": 22,
+          "hypotheses": 3,
+          "observations": 7
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb010",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb010/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 184,
+          "hypotheses": 1,
+          "observations": 51
+        },
+        "Compare and revise": {
+          "shell": 15,
+          "hypotheses": 4,
+          "observations": 7
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb010",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb010/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 7,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 126,
+          "hypotheses": 4,
+          "observations": 42
+        },
+        "Compare and revise": {
+          "shell": 19,
+          "hypotheses": 7,
+          "observations": 6
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb020",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb020/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 13,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 167,
+          "hypotheses": 1,
+          "observations": 45
+        },
+        "Compare and revise": {
+          "shell": 22,
+          "hypotheses": 3,
+          "observations": 5
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb020",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb020/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 24,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 208,
+          "hypotheses": 1,
+          "observations": 49
+        },
+        "Compare and revise": {
+          "shell": 21,
+          "hypotheses": 4,
+          "observations": 6
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb020",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb020/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 22,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 157,
+          "hypotheses": 1,
+          "observations": 36
+        },
+        "Compare and revise": {
+          "shell": 18,
+          "hypotheses": 1,
+          "observations": 8
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb024",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb024/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 12,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 141,
+          "hypotheses": 3,
+          "observations": 34
+        },
+        "Compare and revise": {
+          "shell": 25,
+          "hypotheses": 5,
+          "observations": 8
+        },
+        "Finalize": {
+          "shell": 3,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb024",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb024/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 146,
+          "hypotheses": 1,
+          "observations": 32
+        },
+        "Compare and revise": {
+          "shell": 21,
+          "hypotheses": 8,
+          "observations": 11
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb024",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb024/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 6,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 158,
+          "hypotheses": 1,
+          "observations": 37
+        },
+        "Compare and revise": {
+          "shell": 22,
+          "hypotheses": 5,
+          "observations": 8
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb035",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb035/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 8,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 170,
+          "hypotheses": 1,
+          "observations": 38
+        },
+        "Compare and revise": {
+          "shell": 13,
+          "hypotheses": 4,
+          "observations": 4
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb035",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb035/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 246,
+          "hypotheses": 1,
+          "observations": 61
+        },
+        "Compare and revise": {
+          "shell": 16,
+          "hypotheses": 4,
+          "observations": 8
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb035",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb035/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 244,
+          "hypotheses": 1,
+          "observations": 55
+        },
+        "Compare and revise": {
+          "shell": 24,
+          "hypotheses": 3,
+          "observations": 9
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb048",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb048/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 22,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 172,
+          "hypotheses": 1,
+          "observations": 47
+        },
+        "Compare and revise": {
+          "shell": 17,
+          "hypotheses": 4,
+          "observations": 8
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb048",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb048/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 25,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 165,
+          "hypotheses": 1,
+          "observations": 41
+        },
+        "Compare and revise": {
+          "shell": 19,
+          "hypotheses": 9,
+          "observations": 8
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "hb048",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/hb048/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 27,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 148,
+          "hypotheses": 2,
+          "observations": 43
+        },
+        "Compare and revise": {
+          "shell": 19,
+          "hypotheses": 7,
+          "observations": 8
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "rec5qx7nedrwk4zog",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/rec5qx7nedrwk4zog/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 6,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 134,
+          "hypotheses": 2,
+          "observations": 29
+        },
+        "Compare and revise": {
+          "shell": 22,
+          "hypotheses": 6,
+          "observations": 5
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "rec5qx7nedrwk4zog",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/rec5qx7nedrwk4zog/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 7,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 121,
+          "hypotheses": 3,
+          "observations": 36
+        },
+        "Compare and revise": {
+          "shell": 12,
+          "hypotheses": 5,
+          "observations": 5
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "rec5qx7nedrwk4zog",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/rec5qx7nedrwk4zog/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 6,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 88,
+          "hypotheses": 2,
+          "observations": 22
+        },
+        "Compare and revise": {
+          "shell": 19,
+          "hypotheses": 5,
+          "observations": 5
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recaikavdwoimjy3b",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recaikavdwoimjy3b/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 153,
+          "hypotheses": 2,
+          "observations": 46
+        },
+        "Compare and revise": {
+          "shell": 16,
+          "hypotheses": 9,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recaikavdwoimjy3b",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recaikavdwoimjy3b/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 14,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 100,
+          "hypotheses": 1,
+          "observations": 29
+        },
+        "Compare and revise": {
+          "shell": 22,
+          "hypotheses": 6,
+          "observations": 6
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recaikavdwoimjy3b",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recaikavdwoimjy3b/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 22,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 152,
+          "hypotheses": 1,
+          "observations": 41
+        },
+        "Compare and revise": {
+          "shell": 10,
+          "hypotheses": 5,
+          "observations": 12
+        },
+        "Finalize": {
+          "shell": 6,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recqgsfxqqodhjens",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recqgsfxqqodhjens/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 10,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 161,
+          "hypotheses": 2,
+          "observations": 27
+        },
+        "Compare and revise": {
+          "shell": 23,
+          "hypotheses": 4,
+          "observations": 5
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recqgsfxqqodhjens",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recqgsfxqqodhjens/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 15,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 160,
+          "hypotheses": 0,
+          "observations": 40
+        },
+        "Compare and revise": {
+          "shell": 21,
+          "hypotheses": 4,
+          "observations": 7
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recqgsfxqqodhjens",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recqgsfxqqodhjens/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 6,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 168,
+          "hypotheses": 2,
+          "observations": 36
+        },
+        "Compare and revise": {
+          "shell": 12,
+          "hypotheses": 0,
+          "observations": 4
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recsvhviava5okg19",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recsvhviava5okg19/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 98,
+          "hypotheses": 1,
+          "observations": 27
+        },
+        "Compare and revise": {
+          "shell": 19,
+          "hypotheses": 2,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recsvhviava5okg19",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recsvhviava5okg19/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 7,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 97,
+          "hypotheses": 5,
+          "observations": 30
+        },
+        "Compare and revise": {
+          "shell": 19,
+          "hypotheses": 3,
+          "observations": 9
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "early_stop_only",
+      "problem": "recsvhviava5okg19",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/problems/recsvhviava5okg19/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 15,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 107,
+          "hypotheses": 1,
+          "observations": 32
+        },
+        "Compare and revise": {
+          "shell": 27,
+          "hypotheses": 4,
+          "observations": 11
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb035",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_hb035_3attempts_20261113/problems/hb035/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 11,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 151,
+          "hypotheses": 4,
+          "observations": 44
+        },
+        "Compare and revise": {
+          "shell": 17,
+          "hypotheses": 7,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb035",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_hb035_3attempts_20261113/problems/hb035/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 192,
+          "hypotheses": 2,
+          "observations": 54
+        },
+        "Compare and revise": {
+          "shell": 18,
+          "hypotheses": 2,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb035",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_hb035_3attempts_20261113/problems/hb035/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 10,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 169,
+          "hypotheses": 4,
+          "observations": 46
+        },
+        "Compare and revise": {
+          "shell": 18,
+          "hypotheses": 3,
+          "observations": 9
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb010",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_hb010_3attempts_20261113/problems/hb010/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 10,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 87,
+          "hypotheses": 5,
+          "observations": 35
+        },
+        "Compare and revise": {
+          "shell": 14,
+          "hypotheses": 5,
+          "observations": 9
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb010",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_hb010_3attempts_20261113/problems/hb010/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 8,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 97,
+          "hypotheses": 5,
+          "observations": 31
+        },
+        "Compare and revise": {
+          "shell": 13,
+          "hypotheses": 4,
+          "observations": 11
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb010",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_hb010_3attempts_20261113/problems/hb010/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 8,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 128,
+          "hypotheses": 2,
+          "observations": 32
+        },
+        "Compare and revise": {
+          "shell": 13,
+          "hypotheses": 5,
+          "observations": 14
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb002",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb002/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 4,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 134,
+          "hypotheses": 3,
+          "observations": 33
+        },
+        "Compare and revise": {
+          "shell": 17,
+          "hypotheses": 2,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb002",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb002/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 7,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 179,
+          "hypotheses": 1,
+          "observations": 50
+        },
+        "Compare and revise": {
+          "shell": 8,
+          "hypotheses": 4,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb002",
+      "attempt": 3,
+      "status": "agent_error",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb002/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 5,
+          "hypotheses": 3,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 40,
+          "hypotheses": 1,
+          "observations": 12
+        },
+        "Compare and revise": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb020",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb020/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 14,
+          "hypotheses": 3,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 58,
+          "hypotheses": 0,
+          "observations": 18
+        },
+        "Compare and revise": {
+          "shell": 0,
+          "hypotheses": 2,
+          "observations": 3
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb020",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb020/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 32,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 148,
+          "hypotheses": 1,
+          "observations": 36
+        },
+        "Compare and revise": {
+          "shell": 17,
+          "hypotheses": 6,
+          "observations": 14
+        },
+        "Finalize": {
+          "shell": 15,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb020",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb020/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 11,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 140,
+          "hypotheses": 2,
+          "observations": 41
+        },
+        "Compare and revise": {
+          "shell": 10,
+          "hypotheses": 6,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb024",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb024/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 105,
+          "hypotheses": 2,
+          "observations": 27
+        },
+        "Compare and revise": {
+          "shell": 20,
+          "hypotheses": 5,
+          "observations": 15
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb024",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb024/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 10,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 148,
+          "hypotheses": 0,
+          "observations": 40
+        },
+        "Compare and revise": {
+          "shell": 16,
+          "hypotheses": 8,
+          "observations": 17
+        },
+        "Finalize": {
+          "shell": 3,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb024",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/hb024/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 11,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 140,
+          "hypotheses": 4,
+          "observations": 39
+        },
+        "Compare and revise": {
+          "shell": 13,
+          "hypotheses": 7,
+          "observations": 15
+        },
+        "Finalize": {
+          "shell": 2,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recqgsfxqqodhjens",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/recqgsfxqqodhjens/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 11,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 160,
+          "hypotheses": 0,
+          "observations": 45
+        },
+        "Compare and revise": {
+          "shell": 14,
+          "hypotheses": 7,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recqgsfxqqodhjens",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/recqgsfxqqodhjens/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 7,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 162,
+          "hypotheses": 1,
+          "observations": 41
+        },
+        "Compare and revise": {
+          "shell": 14,
+          "hypotheses": 4,
+          "observations": 8
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recqgsfxqqodhjens",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_preview_3attempts_20261113/problems/recqgsfxqqodhjens/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 5,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 171,
+          "hypotheses": 3,
+          "observations": 44
+        },
+        "Compare and revise": {
+          "shell": 14,
+          "hypotheses": 6,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb048",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/hb048/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 21,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 123,
+          "hypotheses": 1,
+          "observations": 43
+        },
+        "Compare and revise": {
+          "shell": 17,
+          "hypotheses": 7,
+          "observations": 11
+        },
+        "Finalize": {
+          "shell": 1,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb048",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/hb048/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 25,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 142,
+          "hypotheses": 1,
+          "observations": 39
+        },
+        "Compare and revise": {
+          "shell": 6,
+          "hypotheses": 9,
+          "observations": 11
+        },
+        "Finalize": {
+          "shell": 1,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "hb048",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/hb048/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 21,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 126,
+          "hypotheses": 3,
+          "observations": 46
+        },
+        "Compare and revise": {
+          "shell": 12,
+          "hypotheses": 5,
+          "observations": 10
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "rec5qx7nedrwk4zog",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/rec5qx7nedrwk4zog/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 14,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 126,
+          "hypotheses": 1,
+          "observations": 34
+        },
+        "Compare and revise": {
+          "shell": 21,
+          "hypotheses": 3,
+          "observations": 11
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "rec5qx7nedrwk4zog",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/rec5qx7nedrwk4zog/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 4,
+          "hypotheses": 3,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 29,
+          "hypotheses": 2,
+          "observations": 7
+        },
+        "Compare and revise": {
+          "shell": 2,
+          "hypotheses": 0,
+          "observations": 3
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "rec5qx7nedrwk4zog",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/rec5qx7nedrwk4zog/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 100,
+          "hypotheses": 2,
+          "observations": 24
+        },
+        "Compare and revise": {
+          "shell": 15,
+          "hypotheses": 5,
+          "observations": 7
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recaikavdwoimjy3b",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/recaikavdwoimjy3b/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 9,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 56,
+          "hypotheses": 0,
+          "observations": 37
+        },
+        "Compare and revise": {
+          "shell": 6,
+          "hypotheses": 6,
+          "observations": 11
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recaikavdwoimjy3b",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/recaikavdwoimjy3b/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 11,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 97,
+          "hypotheses": 1,
+          "observations": 39
+        },
+        "Compare and revise": {
+          "shell": 15,
+          "hypotheses": 8,
+          "observations": 12
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recaikavdwoimjy3b",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/recaikavdwoimjy3b/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 20,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 149,
+          "hypotheses": 1,
+          "observations": 49
+        },
+        "Compare and revise": {
+          "shell": 14,
+          "hypotheses": 7,
+          "observations": 12
+        },
+        "Finalize": {
+          "shell": 3,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recsvhviava5okg19",
+      "attempt": 1,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/recsvhviava5okg19/attempt-1",
+      "counts": {
+        "Propose and select": {
+          "shell": 7,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 127,
+          "hypotheses": 3,
+          "observations": 39
+        },
+        "Compare and revise": {
+          "shell": 21,
+          "hypotheses": 2,
+          "observations": 9
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recsvhviava5okg19",
+      "attempt": 2,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/recsvhviava5okg19/attempt-2",
+      "counts": {
+        "Propose and select": {
+          "shell": 7,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 133,
+          "hypotheses": 3,
+          "observations": 35
+        },
+        "Compare and revise": {
+          "shell": 12,
+          "hypotheses": 4,
+          "observations": 11
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    },
+    {
+      "version": "shared_state",
+      "problem": "recsvhviava5okg19",
+      "attempt": 3,
+      "status": "completed",
+      "directory": "runs/adapted_shared_state_v2_remaining_full_3attempts_20261113/problems/recsvhviava5okg19/attempt-3",
+      "counts": {
+        "Propose and select": {
+          "shell": 8,
+          "hypotheses": 9,
+          "observations": 0
+        },
+        "Test": {
+          "shell": 122,
+          "hypotheses": 5,
+          "observations": 34
+        },
+        "Compare and revise": {
+          "shell": 20,
+          "hypotheses": 3,
+          "observations": 12
+        },
+        "Finalize": {
+          "shell": 0,
+          "hypotheses": 0,
+          "observations": 0
+        }
+      }
+    }
+  ]
+}

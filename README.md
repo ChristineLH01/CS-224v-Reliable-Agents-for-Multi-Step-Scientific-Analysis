@@ -174,6 +174,42 @@ uv run bmbench run -c configs/sheldon_adapted_preview.yaml                      
 | Adaptation | What it does |
 |---|---|
 | `early_stop` | Ends the run after a round early, before the round cap, once the settled case is closed, then finalizes as usual (stop reason `settled`). One extra tool-less call reads the record; fixed rules decide, from SHELDON's own verdicts: the lead answers the whole question, has at least 1 supporting and no refuting observation, there is at least one rival hypothesis and each has more refuting than supporting observations, and no untested rival or open issue is left. `scripts/replay_early_stop.py` replays the check on a finished run. |
+| `shared_analysis_state` | Shares an attempt-local ledger of downloads, lookups and reported findings across stages and rounds. Each parallel test gets a stable directory across its local iterations and a structured history handoff. Observations, candidates and lookups are recorded automatically; `download_analysis` reuses completed downloads and serializes concurrent requests for the same URL. |
+
+`configs/sheldon_adapted_*.yaml` uses `[all]`, which now enables both adaptations.
+To measure shared state alone:
+
+```bash
+uv run bmbench build  # rebuild the sandbox after changing the runtime
+uv run bmbench run -c configs/sheldon_preview.yaml --set 'agent.adaptations=[shared_analysis_state]'
+```
+
+Shared state currently requires SHELDON's `toolloop` engine for all stages, in either
+`staged` or `session` mode. Unsupported engines fail explicitly. Each test uses
+`/workspace/analysis/tests/round-NN/<stage.hypothesis>/` as its shell working
+directory, with `data/` pointing to the attempt input. Use absolute paths for other
+shared files. These directories prevent accidental relative-path collisions; they do
+not restrict what an arbitrary shell command can write.
+
+The complete ledger and bounded summary are mirrored to
+`agent_session/sheldon/analysis/{state.json,summary.md}` before workspace cleanup.
+Runtime 0.2.0 keeps each test's working directory stable across iterations (including
+claim revisions) and keeps different tests/rounds separate. Use iteration-specific
+filenames to retain artifact versions. Runtime 0.1.0 experiment outputs remain historical;
+rebuild the image and use new run names to evaluate the revised behavior.
+Raw test artifacts follow `sandbox.keep_workspace`; enable it if those files are needed
+for later inspection. Completed downloads are reused by URL within one attempt; direct
+shell downloads are logged but do not participate in this cache. All
+scientific conclusions remain agent-reported. Full submissions and individual observations
+are preserved in the ledger, without the former 1200-character prefix cut. The bounded
+handoff uses complete JSON records, labels excerpts and omitted counts, balances findings
+across tests and flags hypotheses with opposing reported verdicts. A successful command
+or download never verifies a scientific claim. Normal submit_* responses supply the
+records automatically; no record_analysis tool call spends a stage's analysis budget.
+No state is shared between independent attempts.
+`agent.sheldon.params.analysis_summary_chars` bounds history summaries (default 10000
+characters, range 2000–30000). No extra model call is used to build the summary.
+
 
 ## Repository layout
 

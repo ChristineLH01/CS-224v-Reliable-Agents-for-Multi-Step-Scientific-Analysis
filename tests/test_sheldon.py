@@ -258,12 +258,13 @@ def test_adaptations_resolve_into_the_run_name_and_the_sandbox_config():
     assert base.agent.adaptations == [] and "early-stop" not in base.run_name
     one = load_config("configs/sheldon_preview.yaml", ["agent.adaptations=[early_stop]"])
     whole = load_config("configs/sheldon_adapted_preview.yaml")
-    assert one.agent.adaptations == whole.agent.adaptations == ["early_stop"]
-    assert whole.run_name == "preview_sheldon_gpt-6-luna_high_3-rounds_early-stop_timeout-1h_3-attempts"
-    assert one.run_name == whole.run_name
-    assert load_config("configs/sheldon_adapted_full.yaml").run_name.startswith("full_sheldon_gpt-6-luna_high_3-rounds_early-stop_")
+    assert one.agent.adaptations == ["early_stop"]
+    assert whole.agent.adaptations == ["early_stop", "shared_analysis_state"]
+    assert whole.run_name == "preview_sheldon_gpt-6-luna_high_3-rounds_early-stop+shared-analysis-state_timeout-1h_3-attempts"
+    assert one.run_name != whole.run_name
+    assert load_config("configs/sheldon_adapted_full.yaml").run_name.startswith("full_sheldon_gpt-6-luna_high_3-rounds_early-stop+shared-analysis-state_")
     conf = json.loads(make_agent(whole.agent).env()["BMB_SHELDON_CONFIG"])
-    assert conf["adaptations"] == ["early_stop"]
+    assert conf["adaptations"] == ["early_stop", "shared_analysis_state"]
     assert json.loads(agent().env()["BMB_SHELDON_CONFIG"])["adaptations"] == []
     with pytest.raises(ValueError, match="unknown SHELDON adaptation"):
         load_config("configs/sheldon_preview.yaml", ["agent.adaptations=[early-stop]"])

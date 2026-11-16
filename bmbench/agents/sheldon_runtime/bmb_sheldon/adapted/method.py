@@ -16,7 +16,7 @@ from sheldon.methods.sheldon import candidate_analysis, resume, stages
 from sheldon.methods.sheldon.loop import Sheldon, finalize, round_staged
 from sheldon.methods.sheldon.run import Run
 
-from bmb_sheldon.adapted import ADAPTATIONS, METHOD, early_stop, resolve
+from bmb_sheldon.adapted import ADAPTATIONS, METHOD, early_stop, resolve, shared_analysis_state
 
 
 @methods.register(METHOD)
@@ -32,9 +32,20 @@ class AdaptedSheldon(Sheldon):
         return name in self.adaptations()
 
     async def run(self, task: Task, ctx: RunContext) -> Prediction:
-        pred = await self._loop(task, ctx)
+        analysis = None
+        if self.on(shared_analysis_state.NAME):
+            ctx, analysis = shared_analysis_state.attach(ctx, self.param)
+            ctx.scratch[shared_analysis_state.NAME] = analysis
+        try:
+            pred = await self._loop(task, ctx)
+        finally:
+            if analysis is not None:
+                analysis.write()
         checks = [{k: e.get(k) for k in ("round", "passed", "failed")} for e in ctx.trace.of_kind(early_stop.EVENT)]
         pred.extra = {**(pred.extra or {}), "adaptations": self.adaptations(), "early_stop": checks}
+        if analysis is not None:
+            pred.extra[shared_analysis_state.NAME] = {"entries": len(analysis.entries),
+                                                      "archive": str(analysis.archive or analysis.root)}
         return pred
 
     async def settled(self, run: Run) -> bool:
@@ -45,6 +56,10 @@ class AdaptedSheldon(Sheldon):
         if mode not in ("staged", "session"):
             raise ValueError(f"sheldon: unknown mode {mode!r}; use staged or session")
         run = Run(ctx=ctx, task=task, param=self.param)
+        # >>> adaptation: shared_analysis_state
+        if self.on(shared_analysis_state.NAME):
+            ctx.scratch[shared_analysis_state.NAME].run = run
+        # <<< adaptation: shared_analysis_state
         usage = Usage()
         stop = "max_rounds"
         with timer() as t:

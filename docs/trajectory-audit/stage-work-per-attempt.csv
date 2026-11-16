@@ -1,0 +1,241 @@
+version,problem,attempt,status,stage,hypotheses,shell,observations
+early_stop_only,hb002,1,completed,Propose and select,9,6,0
+early_stop_only,hb002,1,completed,Test,0,126,37
+early_stop_only,hb002,1,completed,Compare and revise,3,20,9
+early_stop_only,hb002,1,completed,Finalize,0,0,0
+early_stop_only,hb002,2,completed,Propose and select,9,14,0
+early_stop_only,hb002,2,completed,Test,4,155,41
+early_stop_only,hb002,2,completed,Compare and revise,3,15,9
+early_stop_only,hb002,2,completed,Finalize,0,0,0
+early_stop_only,hb002,3,completed,Propose and select,9,7,0
+early_stop_only,hb002,3,completed,Test,2,146,36
+early_stop_only,hb002,3,completed,Compare and revise,3,12,10
+early_stop_only,hb002,3,completed,Finalize,0,0,0
+early_stop_only,hb010,1,completed,Propose and select,9,6,0
+early_stop_only,hb010,1,completed,Test,3,116,42
+early_stop_only,hb010,1,completed,Compare and revise,3,22,7
+early_stop_only,hb010,1,completed,Finalize,0,0,0
+early_stop_only,hb010,2,completed,Propose and select,9,9,0
+early_stop_only,hb010,2,completed,Test,1,184,51
+early_stop_only,hb010,2,completed,Compare and revise,4,15,7
+early_stop_only,hb010,2,completed,Finalize,0,0,0
+early_stop_only,hb010,3,completed,Propose and select,9,7,0
+early_stop_only,hb010,3,completed,Test,4,126,42
+early_stop_only,hb010,3,completed,Compare and revise,7,19,6
+early_stop_only,hb010,3,completed,Finalize,0,0,0
+early_stop_only,hb020,1,completed,Propose and select,9,13,0
+early_stop_only,hb020,1,completed,Test,1,167,45
+early_stop_only,hb020,1,completed,Compare and revise,3,22,5
+early_stop_only,hb020,1,completed,Finalize,0,0,0
+early_stop_only,hb020,2,completed,Propose and select,9,24,0
+early_stop_only,hb020,2,completed,Test,1,208,49
+early_stop_only,hb020,2,completed,Compare and revise,4,21,6
+early_stop_only,hb020,2,completed,Finalize,0,0,0
+early_stop_only,hb020,3,completed,Propose and select,9,22,0
+early_stop_only,hb020,3,completed,Test,1,157,36
+early_stop_only,hb020,3,completed,Compare and revise,1,18,8
+early_stop_only,hb020,3,completed,Finalize,0,0,0
+early_stop_only,hb024,1,completed,Propose and select,9,12,0
+early_stop_only,hb024,1,completed,Test,3,141,34
+early_stop_only,hb024,1,completed,Compare and revise,5,25,8
+early_stop_only,hb024,1,completed,Finalize,0,3,0
+early_stop_only,hb024,2,completed,Propose and select,9,9,0
+early_stop_only,hb024,2,completed,Test,1,146,32
+early_stop_only,hb024,2,completed,Compare and revise,8,21,11
+early_stop_only,hb024,2,completed,Finalize,0,0,0
+early_stop_only,hb024,3,completed,Propose and select,9,6,0
+early_stop_only,hb024,3,completed,Test,1,158,37
+early_stop_only,hb024,3,completed,Compare and revise,5,22,8
+early_stop_only,hb024,3,completed,Finalize,0,0,0
+early_stop_only,hb035,1,completed,Propose and select,9,8,0
+early_stop_only,hb035,1,completed,Test,1,170,38
+early_stop_only,hb035,1,completed,Compare and revise,4,13,4
+early_stop_only,hb035,1,completed,Finalize,0,0,0
+early_stop_only,hb035,2,completed,Propose and select,9,9,0
+early_stop_only,hb035,2,completed,Test,1,246,61
+early_stop_only,hb035,2,completed,Compare and revise,4,16,8
+early_stop_only,hb035,2,completed,Finalize,0,0,0
+early_stop_only,hb035,3,completed,Propose and select,9,9,0
+early_stop_only,hb035,3,completed,Test,1,244,55
+early_stop_only,hb035,3,completed,Compare and revise,3,24,9
+early_stop_only,hb035,3,completed,Finalize,0,0,0
+early_stop_only,hb048,1,completed,Propose and select,9,22,0
+early_stop_only,hb048,1,completed,Test,1,172,47
+early_stop_only,hb048,1,completed,Compare and revise,4,17,8
+early_stop_only,hb048,1,completed,Finalize,0,0,0
+early_stop_only,hb048,2,completed,Propose and select,9,25,0
+early_stop_only,hb048,2,completed,Test,1,165,41
+early_stop_only,hb048,2,completed,Compare and revise,9,19,8
+early_stop_only,hb048,2,completed,Finalize,0,0,0
+early_stop_only,hb048,3,completed,Propose and select,9,27,0
+early_stop_only,hb048,3,completed,Test,2,148,43
+early_stop_only,hb048,3,completed,Compare and revise,7,19,8
+early_stop_only,hb048,3,completed,Finalize,0,0,0
+early_stop_only,rec5qx7nedrwk4zog,1,completed,Propose and select,9,6,0
+early_stop_only,rec5qx7nedrwk4zog,1,completed,Test,2,134,29
+early_stop_only,rec5qx7nedrwk4zog,1,completed,Compare and revise,6,22,5
+early_stop_only,rec5qx7nedrwk4zog,1,completed,Finalize,0,0,0
+early_stop_only,rec5qx7nedrwk4zog,2,completed,Propose and select,9,7,0
+early_stop_only,rec5qx7nedrwk4zog,2,completed,Test,3,121,36
+early_stop_only,rec5qx7nedrwk4zog,2,completed,Compare and revise,5,12,5
+early_stop_only,rec5qx7nedrwk4zog,2,completed,Finalize,0,0,0
+early_stop_only,rec5qx7nedrwk4zog,3,completed,Propose and select,9,6,0
+early_stop_only,rec5qx7nedrwk4zog,3,completed,Test,2,88,22
+early_stop_only,rec5qx7nedrwk4zog,3,completed,Compare and revise,5,19,5
+early_stop_only,rec5qx7nedrwk4zog,3,completed,Finalize,0,0,0
+early_stop_only,recaikavdwoimjy3b,1,completed,Propose and select,9,9,0
+early_stop_only,recaikavdwoimjy3b,1,completed,Test,2,153,46
+early_stop_only,recaikavdwoimjy3b,1,completed,Compare and revise,9,16,10
+early_stop_only,recaikavdwoimjy3b,1,completed,Finalize,0,0,0
+early_stop_only,recaikavdwoimjy3b,2,completed,Propose and select,9,14,0
+early_stop_only,recaikavdwoimjy3b,2,completed,Test,1,100,29
+early_stop_only,recaikavdwoimjy3b,2,completed,Compare and revise,6,22,6
+early_stop_only,recaikavdwoimjy3b,2,completed,Finalize,0,0,0
+early_stop_only,recaikavdwoimjy3b,3,completed,Propose and select,9,22,0
+early_stop_only,recaikavdwoimjy3b,3,completed,Test,1,152,41
+early_stop_only,recaikavdwoimjy3b,3,completed,Compare and revise,5,10,12
+early_stop_only,recaikavdwoimjy3b,3,completed,Finalize,0,6,0
+early_stop_only,recqgsfxqqodhjens,1,completed,Propose and select,9,10,0
+early_stop_only,recqgsfxqqodhjens,1,completed,Test,2,161,27
+early_stop_only,recqgsfxqqodhjens,1,completed,Compare and revise,4,23,5
+early_stop_only,recqgsfxqqodhjens,1,completed,Finalize,0,0,0
+early_stop_only,recqgsfxqqodhjens,2,completed,Propose and select,9,15,0
+early_stop_only,recqgsfxqqodhjens,2,completed,Test,0,160,40
+early_stop_only,recqgsfxqqodhjens,2,completed,Compare and revise,4,21,7
+early_stop_only,recqgsfxqqodhjens,2,completed,Finalize,0,0,0
+early_stop_only,recqgsfxqqodhjens,3,completed,Propose and select,9,6,0
+early_stop_only,recqgsfxqqodhjens,3,completed,Test,2,168,36
+early_stop_only,recqgsfxqqodhjens,3,completed,Compare and revise,0,12,4
+early_stop_only,recqgsfxqqodhjens,3,completed,Finalize,0,0,0
+early_stop_only,recsvhviava5okg19,1,completed,Propose and select,9,9,0
+early_stop_only,recsvhviava5okg19,1,completed,Test,1,98,27
+early_stop_only,recsvhviava5okg19,1,completed,Compare and revise,2,19,10
+early_stop_only,recsvhviava5okg19,1,completed,Finalize,0,0,0
+early_stop_only,recsvhviava5okg19,2,completed,Propose and select,9,7,0
+early_stop_only,recsvhviava5okg19,2,completed,Test,5,97,30
+early_stop_only,recsvhviava5okg19,2,completed,Compare and revise,3,19,9
+early_stop_only,recsvhviava5okg19,2,completed,Finalize,0,0,0
+early_stop_only,recsvhviava5okg19,3,completed,Propose and select,9,15,0
+early_stop_only,recsvhviava5okg19,3,completed,Test,1,107,32
+early_stop_only,recsvhviava5okg19,3,completed,Compare and revise,4,27,11
+early_stop_only,recsvhviava5okg19,3,completed,Finalize,0,0,0
+shared_state,hb035,1,completed,Propose and select,9,11,0
+shared_state,hb035,1,completed,Test,4,151,44
+shared_state,hb035,1,completed,Compare and revise,7,17,10
+shared_state,hb035,1,completed,Finalize,0,0,0
+shared_state,hb035,2,completed,Propose and select,9,9,0
+shared_state,hb035,2,completed,Test,2,192,54
+shared_state,hb035,2,completed,Compare and revise,2,18,10
+shared_state,hb035,2,completed,Finalize,0,0,0
+shared_state,hb035,3,completed,Propose and select,9,10,0
+shared_state,hb035,3,completed,Test,4,169,46
+shared_state,hb035,3,completed,Compare and revise,3,18,9
+shared_state,hb035,3,completed,Finalize,0,0,0
+shared_state,hb010,1,completed,Propose and select,9,10,0
+shared_state,hb010,1,completed,Test,5,87,35
+shared_state,hb010,1,completed,Compare and revise,5,14,9
+shared_state,hb010,1,completed,Finalize,0,0,0
+shared_state,hb010,2,completed,Propose and select,9,8,0
+shared_state,hb010,2,completed,Test,5,97,31
+shared_state,hb010,2,completed,Compare and revise,4,13,11
+shared_state,hb010,2,completed,Finalize,0,0,0
+shared_state,hb010,3,completed,Propose and select,9,8,0
+shared_state,hb010,3,completed,Test,2,128,32
+shared_state,hb010,3,completed,Compare and revise,5,13,14
+shared_state,hb010,3,completed,Finalize,0,0,0
+shared_state,hb002,1,completed,Propose and select,9,4,0
+shared_state,hb002,1,completed,Test,3,134,33
+shared_state,hb002,1,completed,Compare and revise,2,17,10
+shared_state,hb002,1,completed,Finalize,0,0,0
+shared_state,hb002,2,completed,Propose and select,9,7,0
+shared_state,hb002,2,completed,Test,1,179,50
+shared_state,hb002,2,completed,Compare and revise,4,8,10
+shared_state,hb002,2,completed,Finalize,0,0,0
+shared_state,hb002,3,agent_error,Propose and select,3,5,0
+shared_state,hb002,3,agent_error,Test,1,40,12
+shared_state,hb002,3,agent_error,Compare and revise,0,0,0
+shared_state,hb002,3,agent_error,Finalize,0,0,0
+shared_state,hb020,1,completed,Propose and select,3,14,0
+shared_state,hb020,1,completed,Test,0,58,18
+shared_state,hb020,1,completed,Compare and revise,2,0,3
+shared_state,hb020,1,completed,Finalize,0,0,0
+shared_state,hb020,2,completed,Propose and select,9,32,0
+shared_state,hb020,2,completed,Test,1,148,36
+shared_state,hb020,2,completed,Compare and revise,6,17,14
+shared_state,hb020,2,completed,Finalize,0,15,0
+shared_state,hb020,3,completed,Propose and select,9,11,0
+shared_state,hb020,3,completed,Test,2,140,41
+shared_state,hb020,3,completed,Compare and revise,6,10,10
+shared_state,hb020,3,completed,Finalize,0,0,0
+shared_state,hb024,1,completed,Propose and select,9,9,0
+shared_state,hb024,1,completed,Test,2,105,27
+shared_state,hb024,1,completed,Compare and revise,5,20,15
+shared_state,hb024,1,completed,Finalize,0,0,0
+shared_state,hb024,2,completed,Propose and select,9,10,0
+shared_state,hb024,2,completed,Test,0,148,40
+shared_state,hb024,2,completed,Compare and revise,8,16,17
+shared_state,hb024,2,completed,Finalize,0,3,0
+shared_state,hb024,3,completed,Propose and select,9,11,0
+shared_state,hb024,3,completed,Test,4,140,39
+shared_state,hb024,3,completed,Compare and revise,7,13,15
+shared_state,hb024,3,completed,Finalize,0,2,0
+shared_state,recqgsfxqqodhjens,1,completed,Propose and select,9,11,0
+shared_state,recqgsfxqqodhjens,1,completed,Test,0,160,45
+shared_state,recqgsfxqqodhjens,1,completed,Compare and revise,7,14,10
+shared_state,recqgsfxqqodhjens,1,completed,Finalize,0,0,0
+shared_state,recqgsfxqqodhjens,2,completed,Propose and select,9,7,0
+shared_state,recqgsfxqqodhjens,2,completed,Test,1,162,41
+shared_state,recqgsfxqqodhjens,2,completed,Compare and revise,4,14,8
+shared_state,recqgsfxqqodhjens,2,completed,Finalize,0,0,0
+shared_state,recqgsfxqqodhjens,3,completed,Propose and select,9,5,0
+shared_state,recqgsfxqqodhjens,3,completed,Test,3,171,44
+shared_state,recqgsfxqqodhjens,3,completed,Compare and revise,6,14,10
+shared_state,recqgsfxqqodhjens,3,completed,Finalize,0,0,0
+shared_state,hb048,1,completed,Propose and select,9,21,0
+shared_state,hb048,1,completed,Test,1,123,43
+shared_state,hb048,1,completed,Compare and revise,7,17,11
+shared_state,hb048,1,completed,Finalize,0,1,0
+shared_state,hb048,2,completed,Propose and select,9,25,0
+shared_state,hb048,2,completed,Test,1,142,39
+shared_state,hb048,2,completed,Compare and revise,9,6,11
+shared_state,hb048,2,completed,Finalize,0,1,0
+shared_state,hb048,3,completed,Propose and select,9,21,0
+shared_state,hb048,3,completed,Test,3,126,46
+shared_state,hb048,3,completed,Compare and revise,5,12,10
+shared_state,hb048,3,completed,Finalize,0,0,0
+shared_state,rec5qx7nedrwk4zog,1,completed,Propose and select,9,14,0
+shared_state,rec5qx7nedrwk4zog,1,completed,Test,1,126,34
+shared_state,rec5qx7nedrwk4zog,1,completed,Compare and revise,3,21,11
+shared_state,rec5qx7nedrwk4zog,1,completed,Finalize,0,0,0
+shared_state,rec5qx7nedrwk4zog,2,completed,Propose and select,3,4,0
+shared_state,rec5qx7nedrwk4zog,2,completed,Test,2,29,7
+shared_state,rec5qx7nedrwk4zog,2,completed,Compare and revise,0,2,3
+shared_state,rec5qx7nedrwk4zog,2,completed,Finalize,0,0,0
+shared_state,rec5qx7nedrwk4zog,3,completed,Propose and select,9,9,0
+shared_state,rec5qx7nedrwk4zog,3,completed,Test,2,100,24
+shared_state,rec5qx7nedrwk4zog,3,completed,Compare and revise,5,15,7
+shared_state,rec5qx7nedrwk4zog,3,completed,Finalize,0,0,0
+shared_state,recaikavdwoimjy3b,1,completed,Propose and select,9,9,0
+shared_state,recaikavdwoimjy3b,1,completed,Test,0,56,37
+shared_state,recaikavdwoimjy3b,1,completed,Compare and revise,6,6,11
+shared_state,recaikavdwoimjy3b,1,completed,Finalize,0,0,0
+shared_state,recaikavdwoimjy3b,2,completed,Propose and select,9,11,0
+shared_state,recaikavdwoimjy3b,2,completed,Test,1,97,39
+shared_state,recaikavdwoimjy3b,2,completed,Compare and revise,8,15,12
+shared_state,recaikavdwoimjy3b,2,completed,Finalize,0,0,0
+shared_state,recaikavdwoimjy3b,3,completed,Propose and select,9,20,0
+shared_state,recaikavdwoimjy3b,3,completed,Test,1,149,49
+shared_state,recaikavdwoimjy3b,3,completed,Compare and revise,7,14,12
+shared_state,recaikavdwoimjy3b,3,completed,Finalize,0,3,0
+shared_state,recsvhviava5okg19,1,completed,Propose and select,9,7,0
+shared_state,recsvhviava5okg19,1,completed,Test,3,127,39
+shared_state,recsvhviava5okg19,1,completed,Compare and revise,2,21,9
+shared_state,recsvhviava5okg19,1,completed,Finalize,0,0,0
+shared_state,recsvhviava5okg19,2,completed,Propose and select,9,7,0
+shared_state,recsvhviava5okg19,2,completed,Test,3,133,35
+shared_state,recsvhviava5okg19,2,completed,Compare and revise,4,12,11
+shared_state,recsvhviava5okg19,2,completed,Finalize,0,0,0
+shared_state,recsvhviava5okg19,3,completed,Propose and select,9,8,0
+shared_state,recsvhviava5okg19,3,completed,Test,5,122,34
+shared_state,recsvhviava5okg19,3,completed,Compare and revise,3,20,12
+shared_state,recsvhviava5okg19,3,completed,Finalize,0,0,0

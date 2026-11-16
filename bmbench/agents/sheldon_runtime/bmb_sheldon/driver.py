@@ -80,6 +80,8 @@ def build_config(conf: dict[str, Any], task_file: Path, max_seconds: float) -> A
             raise ValueError(f"adaptations change SHELDON's own method (method: sheldon), not {fields['method']!r}")
         fields["method"] = METHOD
         params["adaptations"] = adaptations
+        if "shared_analysis_state" in adaptations:
+            params["analysis_archive_dir"] = str(Path(conf.get("home") or "/home/agent/.sheldon") / "analysis")
     return Config(**fields, params=params, benchmark=NAME, split="attempt", limit=None, tasks="", seed=0,
                   concurrency=1, cache=False, resume=False, tag="bmbench", max_seconds=max_seconds)
 
@@ -182,6 +184,8 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
     }
     if "early_stop" in extra:  # one entry per check: {round, passed, failed}
         result["early_stop"] = extra["early_stop"]
+    if "shared_analysis_state" in extra:
+        result["shared_analysis_state"] = extra["shared_analysis_state"]
     emit(out, "result", **result)
     return result
 
@@ -254,6 +258,13 @@ def selftest(conf: dict[str, Any], out: Any) -> bool:
         }
         from bmb_sheldon.adapted import resolve  # noqa: PLC0415
 
+        if "shared_analysis_state" in resolve(conf.get("adaptations")):
+            ledger = Path(local["home"]) / "analysis" / "state.json"
+            entries = json.loads(ledger.read_text())["entries"] if ledger.exists() else []
+            completed = [e for e in entries if e["kind"] == "test" and e["status"] == "completed"]
+            checks["shared analysis archived"] = bool(entries)
+            checks["private test directories"] = bool(completed) and all(
+                "/analysis/tests/round-" in e["output_dir"] for e in completed)
         if "early_stop" in resolve(conf.get("adaptations")):  # checked after round 1; round 2 tests nothing
             checks["early stop checked"] = [c.get("round") for c in result.get("early_stop") or []] == [1]
         if Path("/etc/profile.d/00-oom-first.sh").exists():  # in the sandbox image
