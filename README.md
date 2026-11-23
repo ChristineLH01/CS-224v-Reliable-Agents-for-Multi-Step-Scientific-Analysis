@@ -74,6 +74,7 @@ uv run bmbench run -c configs/codex_preview.yaml         # Codex: the same
 uv run bmbench run -c configs/sheldon_preview.yaml       # SHELDON: the same
 uv run bmbench run -c configs/sheldon_adapted_preview.yaml   # adapted SHELDON: every adaptation on (see Adapted SHELDON)
 uv run bmbench run -c configs/claude_code_full.yaml      # 90 problems × 3 attempts (codex_full.yaml, sheldon_full.yaml)
+uv run bmbench run -c configs/codex_luna_10q.yaml        # Codex on SHELDON's model (gpt-6-luna), SHELDON baseline's 10 questions × 3 attempts (results: docs/codex-vs-sheldon-same-model.md)
 
 uv run bmbench run   -c <config> --set agent.model=<model> --set agent.effort=<effort>  # another agent model / effort
 uv run bmbench run   -c <config> --set grader.model=<model>                             # another judge model
@@ -164,20 +165,62 @@ commands repeated earlier work. SHELDON's own records (trace with every prompt, 
 Our changes to SHELDON, each switched on by name in `agent.adaptations`. With none on (the
 default) SHELDON runs unmodified, as above; with any on, the driver runs
 `bmb_sheldon/adapted/`, SHELDON's own run loop with one marked hook per change (a test keeps the
-copy equal to SHELDON's). `[all]` turns on every adaptation, and the run name lists them.
+copy equal to SHELDON's). The run name lists the adaptations that are on. `[all]` means the
+two the dated `all` configs ran with, `early_stop` and `shared_analysis_state`; every later
+adaptation is switched on by name, so those configs keep their meaning.
+
+**Which to use from now on.** Always include `plan_keeps_question`: it fixes a real bug, where in
+7 of 30 baseline attempts the stages before finalize never saw the question. The current setting
+is `[early_stop, shared_analysis_state, plan_keeps_question]` (`configs/sheldon_pkq_es_ss_10q.yaml`).
+Leave `candidate_scan`, `keep_answer_rivals` and `keep_neutral_hypotheses` off. They were tested
+and did not help ([candidate-scan.md](docs/candidate-scan.md), [answer-rivals.md](docs/answer-rivals.md)),
+and they stay in the code only so those runs can be reproduced. The golden hypothesis is an
+oracle ablation for diagnosis, never a setting for real runs.
 
 ```bash
+uv run bmbench run -c configs/sheldon_preview.yaml                                         # baseline: unmodified SHELDON
 uv run bmbench run -c configs/sheldon_preview.yaml --set 'agent.adaptations=[early_stop]'  # one adaptation
-uv run bmbench run -c configs/sheldon_adapted_preview.yaml                                 # all (sheldon_adapted_full.yaml: 90 problems)
+uv run bmbench run -c configs/sheldon_pkq_es_ss_10q.yaml                                   # the current setting (see above), 10q × 3 attempts
+uv run bmbench run -c configs/sheldon_adapted_preview.yaml                                 # [all] (sheldon_adapted_full.yaml: 90 problems)
 ```
 
 | Adaptation | What it does |
 |---|---|
 | `early_stop` | Ends the run after a round early, before the round cap, once the settled case is closed, then finalizes as usual (stop reason `settled`). One extra tool-less call reads the record; fixed rules decide, from SHELDON's own verdicts: the lead answers the whole question, has at least 1 supporting and no refuting observation, there is at least one rival hypothesis and each has more refuting than supporting observations, and no untested rival or open issue is left. `scripts/replay_early_stop.py` replays the check on a finished run. |
 | `shared_analysis_state` | Shares an attempt-local ledger of downloads, lookups and reported findings across stages and rounds. Each parallel test gets a stable directory across its local iterations and a structured history handoff. Observations, candidates and lookups are recorded automatically; `download_analysis` reuses completed downloads and serializes concurrent requests for the same URL. |
+| `candidate_scan` | **Off: no effect.** Not in `[all]`. After plan, one tool-using stage lists the candidate answers the data supports (3 to 10, each with evidence), plus method and data-quality questions as tests. Only an offline recall mode exists: it requires `candidate_scan_only: true`, and the run stops after the scan. `candidate_scan_mode: structured` splits the scan into two isolated calls: `structure` maps the data into full tables and features (strong signals, families sharing a sub-signal, sample groupings) without proposing answers, then `identify` names each feature through reference lookups and lists candidates with the features each explains (`configs/sheldon_structure_scan_recall_*.yaml`, run by `scripts/run_sheldon_structure_scan.py`). `scripts/eval_candidate_recall.py` grades each candidate with the official grader. Results: [docs/candidate-scan.md](docs/candidate-scan.md). |
+| `plan_keeps_question` | **Keep on.** Not in `[all]`. If SHELDON's plan split moves the question sentence out of `situation` (the only part the stages before finalize see), the split is undone and `situation` becomes the whole statement. Every check is logged. Results: [docs/plan-keeps-question.md](docs/plan-keeps-question.md). |
+| `keep_answer_rivals` | **Off: no effect** ([docs/answer-rivals.md](docs/answer-rivals.md)). Not in `[all]`. After each round, a claim shelved because a local loop revised it or exploit refined it is compared with its replacement in one tool-less call. If the two give different answers, the shelved claim is kept as a live rival. A failed call changes nothing. Exploit can still shelve the rival later on its evidence. |
+| `keep_neutral_hypotheses` | **Off: no effect** (same doc). Not in `[all]`. After each round, a claim that exploit shelved with no supporting and no refuting observation (it could not be checked, as opposed to being refuted) is kept instead. Shelving by select or by a local loop is unaffected. No model call. |
 
-`configs/sheldon_adapted_*.yaml` uses `[all]`, which now enables both adaptations.
-To measure shared state alone:
+#### Golden hypothesis (oracle ablation)
+
+`agent.golden_answers` (problem id → answer, or the path of a YAML file holding that map; the configs use the git-ignored `data/golden_answers.yaml`, so write it yourself before running them) tests whether SHELDON keeps a correct answer when
+it has one from the start. It is not an adaptation name, because `adaptations` can be read
+from inside the sandbox. For a listed problem, after the round-1 explore turn, one call with
+tracing off writes a 4th hypothesis that states the answer, in the style of the model's 3.
+It is inserted at a random position, and the model's `submit_exploration` call in the
+session history is rewritten to hold it (that reply loses its encrypted reasoning). Nothing
+marks it. The answer reaches the driver only on stdin, through a host file
+(`attempt-N/stdin.main.txt`) that is not mounted into the sandbox. It never appears in the
+environment (which `run_shell` inherits), config.json, task.json or the trace. Session mode
+only. The driver's result line reports the injected id, position and statement.
+`scripts/audit_golden_hypothesis.py RUN_DIR` follows the hypothesis round by round and lists
+any command that read the session files, the environment or `/proc`. The trace still keeps
+the original 3-hypothesis explore reply. Config: `configs/sheldon_golden_hypothesis_5q.yaml`
+(image `bmbench-sandbox:golden-hypothesis`, built with `docker/sandbox/Dockerfile.runtime`).
+Results (7/15 vs the baseline's 2/15 on the same 5 questions): [docs/golden-hypothesis.md](docs/golden-hypothesis.md).
+
+The same ablation for Codex (or Claude Code): `agent.golden_hypotheses_from` names a SHELDON
+golden run. Attempt N of each problem gets the 4 round-1 hypotheses that attempt N of the
+SHELDON run showed its model: its own 3 from the trace, plus the golden one at its reported
+position. They go in the prompt, in a "Candidate hypotheses" section, as unverified candidates
+from a preliminary exploration, with nothing marking the golden one. The prompt goes only into
+the host file `attempt-N/stdin.main.txt`, and the golden position is recorded in
+`attempt-N/golden_hint.json`. Config: `configs/codex_golden_hypothesis_5q.yaml` (bmbench/golden_hints.py).
+
+`configs/sheldon_adapted_*.yaml` uses `[all]`, which enables `early_stop` and
+`shared_analysis_state` only. To measure shared state alone:
 
 ```bash
 uv run bmbench build  # rebuild the sandbox after changing the runtime
@@ -230,6 +273,11 @@ configs/            run settings per agent, for the preview and the full set
 prompts/            problem prompt, timeout and nudge messages, judge prompts
 docker/             sandbox image (tools, Claude Code, Codex, SHELDON) and proxy image
 scripts/            replay_early_stop.py: the early-stop check on a finished SHELDON run
+                    eval_candidate_recall.py: grades candidate_scan lists and baseline round-1 hypotheses
+                    audit_golden_hypothesis.py: follows the injected golden hypothesis and flags commands that could reveal it
+                    run_sheldon_*.py: resumable batch supervisors (freeze configs, hash sources, wait for running attempts)
+                    footprint_ms_check.py, explain_away_check.py, explain_away_selfwritten.py: explain-away feasibility checks (docs/explain-away.md)
+docs/               experiment reports and design notes per adaptation
 tests/              unit tests (uv run --group dev --group sheldon pytest)
 data/, runs/        downloaded benchmark and run outputs (not in git)
 ```

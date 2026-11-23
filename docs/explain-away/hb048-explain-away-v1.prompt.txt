@@ -1,0 +1,223 @@
+**Question**
+
+What parent drug was administered to this patient given the untargeted mass spectrometry data? Provide the answer as its generic drug name.
+
+**How the families below were found**
+
+Positive-mode ESI, Orbitrap MS2 (HCD 30). Every MS2 precursor was merged within 5 ppm into a feature. Two features are linked when their mass difference matches a common phase I/II biotransformation (listed on each edge) AND they share at least one fragment ion (m/z >= 100). A family is a connected group of linked features, ranked by size. Intensity was not used for ranking. 'intensity rank' is the feature's precursor intensity rank among all 590 features.
+
+**Families (top 10)**
+
+#1 family, 35 members:
+   m/z 153.1275  MS2 scans   1  max prec int 3.53e+05  (intensity rank 269/590)
+   m/z 163.1119  MS2 scans   3  max prec int 2.73e+05  (intensity rank 330/590)
+   m/z 163.1482  MS2 scans   1  max prec int 2.08e+05  (intensity rank 397/590)
+   m/z 171.1381  MS2 scans   1  max prec int 2.51e+05  (intensity rank 349/590)
+   m/z 179.1433  MS2 scans   1  max prec int 2.60e+05  (intensity rank 340/590)
+   m/z 181.1588  MS2 scans   1  max prec int 3.50e+05  (intensity rank 273/590)
+   m/z 189.1639  MS2 scans   1  max prec int 7.17e+05  (intensity rank 158/590)
+   m/z 191.1430  MS2 scans   1  max prec int 2.64e+06  (intensity rank 47/590)
+   m/z 195.1382  MS2 scans   2  max prec int 3.33e+05  (intensity rank 287/590)
+   m/z 199.1330  MS2 scans   1  max prec int 1.34e+05  (intensity rank 527/590)
+   m/z 199.1693  MS2 scans   1  max prec int 2.95e+05  (intensity rank 306/590)
+   m/z 205.1590  MS2 scans   1  max prec int 2.40e+05  (intensity rank 361/590)
+   m/z 207.1382  MS2 scans   1  max prec int 1.54e+05  (intensity rank 491/590)
+   m/z 207.1746  MS2 scans   1  max prec int 6.07e+05  (intensity rank 185/590)
+   m/z 209.1903  MS2 scans   1  max prec int 2.90e+05  (intensity rank 311/590)
+   m/z 219.1746  MS2 scans   1  max prec int 2.06e+05  (intensity rank 401/590)
+   m/z 221.1539  MS2 scans   4  max prec int 2.21e+05  (intensity rank 387/590)
+   m/z 223.1695  MS2 scans   2  max prec int 2.64e+06  (intensity rank 48/590)
+   m/z 227.1643  MS2 scans   2  max prec int 2.09e+05  (intensity rank 396/590)
+   m/z 227.2007  MS2 scans   1  max prec int 1.47e+05  (intensity rank 506/590)
+   m/z 233.1902  MS2 scans   1  max prec int 3.80e+05  (intensity rank 252/590)
+   m/z 237.2215  MS2 scans   1  max prec int 2.90e+05  (intensity rank 313/590)
+   m/z 239.1643  MS2 scans   2  max prec int 7.20e+05  (intensity rank 156/590)
+   m/z 239.2371  MS2 scans   2  max prec int 1.91e+05  (intensity rank 434/590)
+   m/z 241.1801  MS2 scans   1  max prec int 1.39e+05  (intensity rank 518/590)
+   m/z 251.2008  MS2 scans   2  max prec int 2.32e+05  (intensity rank 375/590)
+   m/z 265.2530  MS2 scans   2  max prec int 1.69e+05  (intensity rank 469/590)
+   m/z 267.2685  MS2 scans   1  max prec int 6.32e+05  (intensity rank 181/590)
+   m/z 271.2271  MS2 scans   1  max prec int 2.47e+05  (intensity rank 353/590)
+   m/z 279.2321  MS2 scans   5  max prec int 5.57e+05  (intensity rank 199/590)
+   m/z 281.2478  MS2 scans   5  max prec int 2.11e+06  (intensity rank 60/590)
+   m/z 283.2635  MS2 scans   1  max prec int 4.32e+05  (intensity rank 237/590)
+   m/z 297.2428  MS2 scans   1  max prec int 1.27e+05  (intensity rank 540/590)
+   m/z 299.2584  MS2 scans   6  max prec int 6.82e+05  (intensity rank 164/590)
+   m/z 315.2532  MS2 scans   2  max prec int 2.26e+05  (intensity rank 383/590)
+   edge 153.1275 -> 171.1381: +H2O (hydration); shared fragments [148.977]
+   edge 153.1275 -> 181.1588: -C2H4 (deethylation); shared fragments [107.085]
+   edge 153.1275 -> 195.1382: +acetyl; shared fragments [107.085, 135.117]
+   edge 163.1119 -> 191.1430: -C2H4 (deethylation); shared fragments [107.049, 135.081]
+   edge 163.1482 -> 181.1588: +H2O (hydration); shared fragments [107.085, 121.101, 163.149]
+   edge 163.1482 -> 195.1382: +2O; shared fragments [107.085]
+   edge 179.1433 -> 207.1746: -C2H4 (deethylation); shared fragments [119.085]
+   edge 179.1433 -> 221.1539: +acetyl; shared fragments [161.133]
+   edge 181.1588 -> 199.1693: +H2O (hydration); shared fragments [107.085, 111.081, 121.101, 163.149]
+   edge 181.1588 -> 209.1903: -C2H4 (deethylation); shared fragments [107.085, 109.101]
+   edge 181.1588 -> 223.1695: +acetyl; shared fragments [107.085, 109.101, 121.101, 163.149]
+   edge 189.1639 -> 207.1746: +H2O (hydration); shared fragments [105.069, 107.085, 109.101, 119.085]
+   edge 189.1639 -> 221.1539: +2O; shared fragments [105.069, 161.133]
+   edge 191.1430 -> 205.1590: -CH2 (demethylation); shared fragments [107.049, 121.065, 135.081, 149.097]
+   edge 191.1430 -> 207.1382: +O (hydroxylation / N-oxide); shared fragments [107.049, 121.065, 149.097]
+   edge 191.1430 -> 219.1746: -C2H4 (deethylation); shared fragments [107.049, 135.081, 149.097]
+   edge 195.1382 -> 223.1695: -C2H4 (deethylation); shared fragments [107.085, 121.065, 135.081, 135.117]
+   edge 199.1330 -> 227.1643: -C2H4 (deethylation); shared fragments [107.085, 121.101]
+   edge 199.1693 -> 227.2007: -C2H4 (deethylation); shared fragments [111.081]
+   edge 199.1693 -> 241.1801: +acetyl; shared fragments [107.085, 121.101, 135.117]
+   edge 205.1590 -> 219.1746: -CH2 (demethylation); shared fragments [107.049, 135.081, 149.097, 163.113]
+   edge 205.1590 -> 223.1695: +H2O (hydration); shared fragments [121.065, 135.081, 149.097]
+   edge 205.1590 -> 233.1902: -C2H4 (deethylation); shared fragments [107.049, 121.065, 135.081, 149.097]
+   edge 207.1746 -> 209.1903: +/-H2; shared fragments [107.085, 109.101, 135.117]
+   edge 207.1746 -> 223.1695: +O (hydroxylation / N-oxide); shared fragments [105.069, 107.085, 109.101, 121.101]
+   edge 207.1746 -> 239.1643: +2O; shared fragments [105.069, 107.085]
+   edge 209.1903 -> 227.2007: +H2O (hydration); shared fragments [109.101]
+   edge 209.1903 -> 237.2215: -C2H4 (deethylation); shared fragments [107.085, 109.101, 135.117]
+   edge 209.1903 -> 241.1801: +2O; shared fragments [107.085, 125.097, 135.117]
+   edge 209.1903 -> 251.2008: +acetyl; shared fragments [109.101]
+   edge 219.1746 -> 233.1902: -CH2 (demethylation); shared fragments [107.049, 135.081, 149.097, 163.113]
+   edge 221.1539 -> 223.1695: +/-H2; shared fragments [105.072]
+   edge 221.1539 -> 239.1643: +H2O (hydration); shared fragments [105.072, 161.133, 221.154]
+   edge 223.1695 -> 239.1643: +O (hydroxylation / N-oxide); shared fragments [105.072, 107.085]
+   edge 223.1695 -> 241.1801: +H2O (hydration); shared fragments [107.085, 121.101, 135.117]
+   edge 223.1695 -> 251.2008: -C2H4 (deethylation); shared fragments [109.101]
+   edge 227.1643 -> 241.1801: -CH2 (demethylation); shared fragments [107.085, 121.101, 125.097]
+   edge 237.2215 -> 239.2371: +/-H2; shared fragments [109.101]
+   edge 237.2215 -> 265.2530: -C2H4 (deethylation); shared fragments [149.133]
+   edge 239.1643 -> 241.1801: +/-H2; shared fragments [107.085]
+   edge 239.2371 -> 267.2685: -C2H4 (deethylation); shared fragments [109.101]
+   edge 239.2371 -> 271.2271: +2O; shared fragments [109.101]
+   edge 239.2371 -> 281.2478: +acetyl; shared fragments [109.101]
+   edge 265.2530 -> 283.2635: +H2O (hydration); shared fragments [149.133, 163.149, 247.242]
+   edge 267.2685 -> 283.2635: +O (hydroxylation / N-oxide); shared fragments [109.101, 123.117]
+   edge 267.2685 -> 299.2584: +2O; shared fragments [109.101, 123.117]
+   edge 271.2271 -> 299.2584: -C2H4 (deethylation); shared fragments [109.101]
+   edge 279.2321 -> 281.2478: +/-H2; shared fragments [123.117]
+   edge 281.2478 -> 283.2635: +/-H2; shared fragments [107.085, 109.101, 111.117, 123.117]
+   edge 281.2478 -> 299.2584: +H2O (hydration); shared fragments [109.101, 123.117]
+   edge 283.2635 -> 299.2584: +O (hydroxylation / N-oxide); shared fragments [109.101, 123.117]
+   edge 283.2635 -> 315.2532: +2O; shared fragments [109.101, 123.117]
+   edge 297.2428 -> 315.2532: +H2O (hydration); shared fragments [279.231]
+   edge 299.2584 -> 315.2532: +O (hydroxylation / N-oxide); shared fragments [109.101, 123.117]
+
+#2 family, 19 members:
+   m/z 163.0755  MS2 scans   1  max prec int 2.45e+05  (intensity rank 354/590)
+   m/z 167.0704  MS2 scans   1  max prec int 1.34e+06  (intensity rank 88/590)
+   m/z 181.0858  MS2 scans   1  max prec int 8.29e+05  (intensity rank 135/590)
+   m/z 195.1018  MS2 scans   1  max prec int 2.36e+05  (intensity rank 365/590)
+   m/z 201.1275  MS2 scans   1  max prec int 6.79e+05  (intensity rank 165/590)
+   m/z 209.1174  MS2 scans   1  max prec int 1.65e+06  (intensity rank 73/590)
+   m/z 211.0968  MS2 scans   1  max prec int 1.52e+05  (intensity rank 494/590)
+   m/z 217.1226  MS2 scans   1  max prec int 1.26e+05  (intensity rank 541/590)
+   m/z 219.1383  MS2 scans   1  max prec int 2.04e+05  (intensity rank 406/590)
+   m/z 223.0966  MS2 scans   2  max prec int 1.79e+06  (intensity rank 67/590)
+   m/z 223.1331  MS2 scans   1  max prec int 2.34e+05  (intensity rank 369/590)
+   m/z 233.1174  MS2 scans   2  max prec int 2.02e+05  (intensity rank 418/590)
+   m/z 235.1327  MS2 scans   2  max prec int 2.85e+05  (intensity rank 316/590)
+   m/z 237.1124  MS2 scans   1  max prec int 1.81e+05  (intensity rank 448/590)
+   m/z 249.1484  MS2 scans   3  max prec int 9.10e+05  (intensity rank 129/590)
+   m/z 251.1278  MS2 scans   2  max prec int 5.80e+05  (intensity rank 193/590)
+   m/z 255.1230  MS2 scans   1  max prec int 1.48e+05  (intensity rank 505/590)
+   m/z 265.1437  MS2 scans   1  max prec int 3.39e+05  (intensity rank 284/590)
+   m/z 399.1290  MS2 scans   1  max prec int 1.28e+05  (intensity rank 539/590)
+   edge 163.0755 -> 181.0858: +H2O (hydration); shared fragments [163.077]
+   edge 167.0704 -> 195.1018: -C2H4 (deethylation); shared fragments [121.029, 149.061, 167.07]
+   edge 181.0858 -> 195.1018: -CH2 (demethylation); shared fragments [123.081]
+   edge 181.0858 -> 209.1174: -C2H4 (deethylation); shared fragments [139.041, 153.054]
+   edge 181.0858 -> 223.0966: +acetyl; shared fragments [163.074, 181.086]
+   edge 195.1018 -> 209.1174: -CH2 (demethylation); shared fragments [121.029]
+   edge 195.1018 -> 211.0968: +O (hydroxylation / N-oxide); shared fragments [149.061]
+   edge 195.1018 -> 237.1124: +acetyl; shared fragments [195.102]
+   edge 201.1275 -> 217.1226: +O (hydroxylation / N-oxide); shared fragments [107.049]
+   edge 201.1275 -> 219.1383: +H2O (hydration); shared fragments [107.049, 173.097, 201.129]
+   edge 209.1174 -> 251.1278: +acetyl; shared fragments [121.029, 139.038, 153.054, 209.118]
+   edge 217.1226 -> 219.1383: +/-H2; shared fragments [107.049]
+   edge 217.1226 -> 235.1327: +H2O (hydration); shared fragments [107.049]
+   edge 219.1383 -> 235.1327: +O (hydroxylation / N-oxide); shared fragments [107.049, 135.081, 175.113]
+   edge 219.1383 -> 251.1278: +2O; shared fragments [149.061]
+   edge 223.0966 -> 399.1290: +glucuronide; shared fragments [181.086]
+   edge 223.1331 -> 265.1437: +acetyl; shared fragments [205.122]
+   edge 233.1174 -> 251.1278: +H2O (hydration); shared fragments [121.029, 149.061, 205.122, 205.125]
+   edge 235.1327 -> 249.1484: -CH2 (demethylation); shared fragments [135.081]
+   edge 237.1124 -> 255.1230: +H2O (hydration); shared fragments [135.081, 177.09, 195.102]
+   edge 251.1278 -> 265.1437: -CH2 (demethylation); shared fragments [149.061, 205.122, 233.118]
+
+#3 family, 7 members:
+   m/z 412.2845  MS2 scans   1  max prec int 7.24e+05  (intensity rank 152/590)
+   m/z 414.3005  MS2 scans   1  max prec int 2.58e+06  (intensity rank 49/590)
+   m/z 430.2951  MS2 scans   1  max prec int 2.25e+06  (intensity rank 57/590)
+   m/z 432.3107  MS2 scans   2  max prec int 2.76e+06  (intensity rank 43/590)
+   m/z 448.3058  MS2 scans   1  max prec int 1.82e+06  (intensity rank 65/590)
+   m/z 450.3217  MS2 scans   1  max prec int 2.00e+05  (intensity rank 420/590)
+   m/z 466.3164  MS2 scans   1  max prec int 2.88e+06  (intensity rank 40/590)
+   edge 412.2845 -> 414.3005: +/-H2; shared fragments [201.165]
+   edge 412.2845 -> 430.2951: +H2O (hydration); shared fragments [209.133, 227.145, 337.254, 412.284]
+   edge 414.3005 -> 430.2951: +O (hydroxylation / N-oxide); shared fragments [105.072, 107.085, 109.101, 119.085]
+   edge 414.3005 -> 432.3107: +H2O (hydration); shared fragments [105.072, 107.085, 109.101, 119.085]
+   edge 430.2951 -> 432.3107: +/-H2; shared fragments [105.072, 107.085, 109.101, 119.085]
+   edge 430.2951 -> 448.3058: +H2O (hydration); shared fragments [119.085, 158.082, 199.149, 209.133]
+   edge 432.3107 -> 448.3058: +O (hydroxylation / N-oxide); shared fragments [119.085, 158.082, 211.149, 213.165]
+   edge 432.3107 -> 450.3217: +H2O (hydration); shared fragments [161.133, 414.3, 414.303]
+   edge 448.3058 -> 466.3164: +H2O (hydration); shared fragments [119.085, 158.082, 199.149, 209.133]
+   edge 450.3217 -> 466.3164: +O (hydroxylation / N-oxide); shared fragments [161.133]
+
+#4 family, 6 members:
+   m/z 246.8626  MS2 scans   1  max prec int 6.60e+05  (intensity rank 172/590)
+   m/z 271.8951  MS2 scans   1  max prec int 1.23e+06  (intensity rank 97/590)
+   m/z 287.8893  MS2 scans   3  max prec int 5.01e+06  (intensity rank 24/590)
+   m/z 303.8843  MS2 scans   1  max prec int 1.38e+06  (intensity rank 86/590)
+   m/z 305.8998  MS2 scans   1  max prec int 3.48e+05  (intensity rank 275/590)
+   m/z 328.9161  MS2 scans   1  max prec int 8.59e+05  (intensity rank 134/590)
+   edge 246.8626 -> 303.8843: +glycine; shared fragments [113.964, 180.888, 197.892, 208.884]
+   edge 271.8951 -> 287.8893: +O (hydroxylation / N-oxide); shared fragments [208.884]
+   edge 271.8951 -> 303.8843: +2O; shared fragments [113.964, 208.884]
+   edge 271.8951 -> 328.9161: +glycine; shared fragments [113.964, 208.884]
+   edge 287.8893 -> 303.8843: +O (hydroxylation / N-oxide); shared fragments [190.872, 208.884, 226.893]
+   edge 287.8893 -> 305.8998: +H2O (hydration); shared fragments [226.893, 264.873]
+   edge 303.8843 -> 305.8998: +/-H2; shared fragments [226.893]
+
+#5 family, 6 members:
+   m/z 172.0759  MS2 scans   1  max prec int 4.20e+05  (intensity rank 240/590)
+   m/z 176.0708  MS2 scans   2  max prec int 3.78e+05  (intensity rank 255/590)
+   m/z 188.0706  MS2 scans   3  max prec int 1.42e+07  (intensity rank 4/590)
+   m/z 190.0865  MS2 scans   1  max prec int 7.84e+05  (intensity rank 144/590)
+   m/z 192.0657  MS2 scans   1  max prec int 2.42e+05  (intensity rank 359/590)
+   m/z 206.0814  MS2 scans   1  max prec int 3.50e+05  (intensity rank 274/590)
+   edge 172.0759 -> 190.0865: +H2O (hydration); shared fragments [130.065, 172.074]
+   edge 176.0708 -> 190.0865: -CH2 (demethylation); shared fragments [130.065]
+   edge 188.0706 -> 206.0814: +H2O (hydration); shared fragments [118.065, 144.081, 146.061, 170.061]
+   edge 190.0865 -> 206.0814: +O (hydroxylation / N-oxide); shared fragments [130.065]
+   edge 192.0657 -> 206.0814: -CH2 (demethylation); shared fragments [146.061]
+
+#6 family, 5 members:
+   m/z 242.1542  MS2 scans   2  max prec int 3.47e+05  (intensity rank 278/590)
+   m/z 256.1699  MS2 scans   1  max prec int 4.39e+06  (intensity rank 31/590)
+   m/z 270.1489  MS2 scans   1  max prec int 8.19e+04  (intensity rank 579/590)
+   m/z 272.1646  MS2 scans   1  max prec int 8.14e+05  (intensity rank 137/590)
+   m/z 432.2024  MS2 scans   1  max prec int 1.07e+06  (intensity rank 114/590)
+   edge 242.1542 -> 256.1699: -CH2 (demethylation); shared fragments [167.085]
+   edge 256.1699 -> 272.1646: +O (hydroxylation / N-oxide); shared fragments [167.085]
+   edge 256.1699 -> 432.2024: +glucuronide; shared fragments [167.085]
+   edge 270.1489 -> 272.1646: +/-H2; shared fragments [167.085]
+
+#7 family, 4 members:
+   m/z 255.2109  MS2 scans   1  max prec int 6.75e+05  (intensity rank 167/590)
+   m/z 257.2266  MS2 scans   1  max prec int 4.60e+05  (intensity rank 224/590)
+   m/z 269.2265  MS2 scans   1  max prec int 3.92e+05  (intensity rank 248/590)
+   m/z 271.2422  MS2 scans   1  max prec int 3.98e+05  (intensity rank 245/590)
+   edge 255.2109 -> 257.2266: +/-H2; shared fragments [175.149]
+   edge 255.2109 -> 269.2265: -CH2 (demethylation); shared fragments [157.101, 199.149]
+   edge 257.2266 -> 271.2422: -CH2 (demethylation); shared fragments [107.085, 109.101, 121.101, 135.117]
+   edge 269.2265 -> 271.2422: +/-H2; shared fragments [107.085, 109.101, 119.085, 121.101]
+
+#8 family, 4 members:
+   m/z 313.2739  MS2 scans   1  max prec int 2.16e+05  (intensity rank 392/590)
+   m/z 331.2845  MS2 scans   1  max prec int 1.38e+06  (intensity rank 84/590)
+   m/z 341.3054  MS2 scans   1  max prec int 2.25e+06  (intensity rank 56/590)
+   m/z 359.3157  MS2 scans   1  max prec int 1.15e+06  (intensity rank 108/590)
+   edge 313.2739 -> 331.2845: +H2O (hydration); shared fragments [313.275]
+   edge 331.2845 -> 359.3157: -C2H4 (deethylation); shared fragments [109.101, 111.117, 123.117]
+   edge 341.3054 -> 359.3157: +H2O (hydration); shared fragments [109.101, 111.117, 285.279, 341.304]
+
+**Task**
+
+For each family, attribute its most likely source with a short reason grounded in the masses, mass differences and shared fragments. Then name the parent drug administered (generic name) and give the rank of the family it comes from.

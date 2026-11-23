@@ -1,0 +1,34 @@
+{
+  "early_stop_only": {
+    "attempts": 30,
+    "formal_correct": 17.0,
+    "actual_shell_executions": 5446,
+    "record_path_commands": 2938,
+    "exact_cross_scope_repeats": 86,
+    "mean_minutes": 28.857833333333335,
+    "solver_cost_estimate": 3.858728,
+    "download_tool_calls": 0,
+    "download_cache_hits": 0,
+    "stop_reasons": {
+      "max_rounds": 28,
+      "budget:max_seconds=3599.87": 1,
+      "budget:max_seconds=3599.84": 1
+    }
+  },
+  "v2": {
+    "attempts": 30,
+    "formal_correct": 17.0,
+    "actual_shell_executions": 4499,
+    "record_path_commands": 1926,
+    "exact_cross_scope_repeats": 24,
+    "mean_minutes": 20.049944444444446,
+    "solver_cost_estimate": 3.670328,
+    "download_tool_calls": 154,
+    "download_cache_hits": 22,
+    "stop_reasons": {
+      "max_rounds": 27,
+      "": 1,
+      "settled": 2
+    }
+  }
+}

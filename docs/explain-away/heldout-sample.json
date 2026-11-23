@@ -1,0 +1,142 @@
+{
+ "seed": 20261116,
+ "strata": {
+  "expression": [
+   "hb001",
+   "hb003",
+   "hb009",
+   "hb016",
+   "hb017",
+   "hb028",
+   "hb029",
+   "hb030",
+   "hb032",
+   "hb033",
+   "hb039",
+   "hb043",
+   "hb052",
+   "rec35farlwqz6kmy7",
+   "rec4kcr3oroe3jc1j",
+   "rec5xuqc70ithi19c",
+   "recav6jt6q0aa9sjs",
+   "rece8yuamgclcpj9i",
+   "reci6iglwiertmyyk",
+   "recnayu0v8zttjlgf",
+   "recnquldskiadnpq8",
+   "recvnlq3i6id6qqge",
+   "recvwctg0xadnklms",
+   "recx4bsaa5zoxy3nv"
+  ],
+  "reads_variants": [
+   "hb008",
+   "hb012",
+   "hb015",
+   "hb018",
+   "hb045",
+   "rec1vycgih4bavtur",
+   "rec6xeqyddiz6desi",
+   "recartntbrx7kwzkv",
+   "recc3vmqjrsefqw57",
+   "reccipvrmk1k0gqkr",
+   "reccniibn7ary80hj",
+   "reccslfjnjcfdpgak",
+   "reccwgc4buredxvyz",
+   "recffr4vmqdynph2n",
+   "rechlnhmn1jsmsser",
+   "rechnr2wkqiqxjwlv",
+   "recmiryoehog9bvce",
+   "recn4p43tkgazjeqy",
+   "recn5sa8gwpqsx15g",
+   "recqjfzttushuxz4j",
+   "recro5s1o0odyssqs",
+   "rectaxd8eganpl4lw",
+   "recv1pkneurxhwpo9",
+   "recv7lmpypdi61mdi",
+   "recvgrwtebczhn3k8",
+   "recyomvehwpj8s6t1"
+  ],
+  "microbial": [
+   "hb019",
+   "hb023",
+   "hb031",
+   "hb049",
+   "hb050",
+   "rec6urlqzwqkhmhaj",
+   "recbkqinqhpfdn9bq",
+   "recmp75e1chtpzx3c",
+   "recnheebqpbdp1nj9",
+   "recoyp6qrymldcjle",
+   "recug1uijclv7ni4q",
+   "recy5kshz8ysawujt"
+  ],
+  "epigenomic": [
+   "hb021",
+   "hb026",
+   "hb038",
+   "hb041",
+   "hb044",
+   "hb047",
+   "hb054",
+   "rec9ogrlqg5u0ke09",
+   "recea4hqimc4sypon",
+   "recgrmy32hxalop9m",
+   "recrgfvzr5rrjpim7",
+   "recyolnajpygz2xeo",
+   "reczkg8fvfp1fo3nn",
+   "recxdlpmtviybebk8"
+  ],
+  "other": [
+   "hb013",
+   "hb025",
+   "hb046",
+   "recjgwpbyodqoihqc"
+  ]
+ },
+ "uncertain_stratum": [
+  "hb009",
+  "hb013",
+  "hb028",
+  "hb032",
+  "rec1vycgih4bavtur",
+  "reccwgc4buredxvyz"
+ ],
+ "quota": {
+  "expression": 6,
+  "reads_variants": 7,
+  "microbial": 3,
+  "epigenomic": 3,
+  "other": 1
+ },
+ "sample": {
+  "expression": [
+   "hb029",
+   "hb039",
+   "hb052",
+   "recav6jt6q0aa9sjs",
+   "recnquldskiadnpq8",
+   "recx4bsaa5zoxy3nv"
+  ],
+  "reads_variants": [
+   "hb008",
+   "rec6xeqyddiz6desi",
+   "reccniibn7ary80hj",
+   "recmiryoehog9bvce",
+   "recn5sa8gwpqsx15g",
+   "recro5s1o0odyssqs",
+   "recv1pkneurxhwpo9"
+  ],
+  "microbial": [
+   "recnheebqpbdp1nj9",
+   "recoyp6qrymldcjle",
+   "recy5kshz8ysawujt"
+  ],
+  "epigenomic": [
+   "hb041",
+   "hb047",
+   "recea4hqimc4sypon"
+  ],
+  "other": [
+   "recjgwpbyodqoihqc"
+  ]
+ }
+}

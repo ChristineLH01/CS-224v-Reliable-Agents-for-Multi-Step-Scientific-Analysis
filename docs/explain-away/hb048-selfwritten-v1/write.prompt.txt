@@ -1,0 +1,20 @@
+You design an analysis that finds the answer to a question in a dataset. Work in this order.
+1. Footprint. Whatever the answer turns out to be, what would it leave in this data? State it as measurable relations among units of the data (values, differences, shared sub-signals, co-occurrence, group contrasts), not as a specific named answer.
+2. Background. What else in such a sample produces strong or structured signals that are not the answer? Say how the footprint tells the answer apart from it.
+3. Program. Write a Python 3 program, standard library only, that computes the footprint over the whole table and prints the groups of units that satisfy it, ranked by how fully they satisfy it, not by signal magnitude, with the evidence for each (the units, the relations found, the values). Print at most 10 groups and at most 6,000 characters. Do not name, hard-code or search for any specific candidate answer.
+The program is run as: python3 footprint.py /data/features.json
+
+---
+
+**Question**
+
+What parent drug was administered to this patient given the untargeted mass spectrometry data? Provide the answer as its generic drug name.
+
+**Data**
+
+One untargeted LC-MS/MS run of a patient sample: positive-mode ESI, Orbitrap, data-dependent MS2 (HCD). /data/features.json is a JSON list of 589 precursor features. Each has: id; mz, the precursor m/z (scans merged within 5 ppm); rt, [first, last] scan start time; n_ms2, the number of MS2 scans; max_precursor_intensity; fragments, consensus product ions as [m/z, mean intensity in % of the scan's base peak] (ions >= 2% of base peak, m/z >= 40, present in at least half of the feature's MS2 scans, at most 30).
+
+Three example rows:
+{"id": "F101", "mz": 198.12803, "rt": [2.66, 10.22], "n_ms2": 2, "max_precursor_intensity": 1181567, "fragments": [[51.9408, 13.4], [70.9427, 8.2], [72.9379, 39.4], [89.9642, 16.3], [90.9483, 15.3], [91.0549, 94.8], [97.0766, 12.6], [102.9489, 7.4], [113.9641, 100.0], [114.9595, 11.2], [125.9643, 11.1], [126.9559, 9.8], [128.9715, 13.3], [130.9668, 18.5], [131.9746, 45.7], [132.9697, 9.3], [141.9591, 17.7], [143.9749, 7.7], [146.9818, 11.1], [148.9767, 9.6], [154.991, 10.2], [155.975, 9.0], [156.9702, 11.3], [159.9697, 15.3], [173.001, 9.3], [174.9803, 17.3], [175.976, 7.3], [191.8809, 7.6], [198.1032, 12.0], [198.1282, 7.7]]}
+{"id": "F301", "mz": 297.1792, "rt": [6.78, 6.78], "n_ms2": 1, "max_precursor_intensity": 271465, "fragments": [[57.0708, 55.3], [57.7003, 51.2], [63.2155, 45.1], [75.8861, 49.2], [91.9513, 100.0], [114.3214, 54.2], [128.7317, 70.4], [140.4905, 58.2], [140.8157, 75.4], [181.1231, 61.7], [591.0311, 66.0]]}
+{"id": "F501", "mz": 519.40516, "rt": [6.29, 6.75], "n_ms2": 2, "max_precursor_intensity": 188785, "fragments": [[55.282, 61.5], [55.5245, 60.3], [59.434, 58.9], [59.6634, 81.8], [60.7343, 59.9], [83.0068, 65.6], [84.4364, 70.3], [87.5306, 72.0], [91.379, 67.4], [91.9507, 68.8], [96.6568, 74.3], [104.6454, 67.7], [116.4491, 64.2], [125.7042, 69.3], [133.5386, 70.8], [134.7941, 68.4], [141.1288, 93.3], [154.6909, 74.2], [170.9809, 77.9], [246.0752, 84.6], [267.9175, 82.7], [327.2926, 71.7], [418.0437, 100.0], [451.4458, 71.1], [478.4689, 85.0], [507.3435, 100.0]]}
