@@ -1,0 +1,43 @@
+# Oracle ablation (golden hypothesis) for Codex, the counterpart of
+# configs/sheldon_golden_hypothesis_5q.yaml. Codex has no hypothesis rounds, so attempt i of
+# each question gets, in its prompt, the four round-1 hypotheses of attempt i of the SHELDON
+# golden run (SHELDON's own three plus the injected one stating the correct answer, same
+# order, unmarked), as unverified candidates from a preliminary exploration
+# (bmbench/golden_hints.py). Which one is golden is kept in each attempt's host-only
+# golden_hint.json. Everything else is configs/codex_luna_10q.yaml on the same 5 questions.
+run_name: codex_golden_hypothesis_5q_3attempts
+n_attempts: 3
+concurrency: 2
+
+dataset:
+  name: full
+  problem_ids:
+  - hb024
+  - hb048
+  - recaikavdwoimjy3b
+  - hb035
+  - recsvhviava5okg19
+  human_solvable: null
+  delete_after_problem: true
+
+agent:
+  type: codex
+  model: gpt-6-luna
+  effort: high
+  usd_per_mtok: [0.1, 0.01, 0.5]
+  finalize_on_timeout: true
+  finalize_timeout_s: 300
+  max_nudges: 1
+  golden_hypotheses_from: runs/golden_hypothesis_5q_3attempts_20261116
+
+sandbox:
+  cpus: 4
+  memory: 3.5g
+  timeout_s: 3600
+  network: allowlist
+  keep_workspace: false
+
+grader:
+  auto: true
+  model: claude-opus-5-5
+  effort: medium

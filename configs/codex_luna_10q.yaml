@@ -1,0 +1,44 @@
+# Codex (unchanged) on the same model as SHELDON (gpt-6-luna, effort high), on the same
+# ten questions, 3 attempts each. Settings mirror the SHELDON baseline run's config.yaml:
+# runs 2/preview_sheldon_gpt-6-luna_high_3-rounds_timeout-1h_3-attempts/config.yaml
+# so the only difference is the agent (Codex CLI vs SHELDON), not the model.
+# The earlier Codex baseline used gpt-6.1-sol (runs 2/preview_codex_gpt-6-1-sol_...).
+n_attempts: 3
+concurrency: 2
+
+dataset:
+  name: full
+  problem_ids:
+  - hb002
+  - hb020
+  - recqgsfxqqodhjens
+  - hb024
+  - hb035
+  - hb048
+  - rec5qx7nedrwk4zog
+  - hb010
+  - recaikavdwoimjy3b
+  - recsvhviava5okg19
+  human_solvable: null
+  delete_after_problem: true
+
+agent:
+  type: codex
+  model: gpt-6-luna
+  effort: high
+  usd_per_mtok: [0.1, 0.01, 0.5]   # same price table as the SHELDON runs
+  finalize_on_timeout: true
+  finalize_timeout_s: 300          # same closing window as SHELDON's finalize stage
+  max_nudges: 1
+
+sandbox:
+  cpus: 4
+  memory: 3.5g
+  timeout_s: 3600
+  network: allowlist
+  keep_workspace: false
+
+grader:
+  auto: true
+  model: claude-opus-5-5
+  effort: medium
