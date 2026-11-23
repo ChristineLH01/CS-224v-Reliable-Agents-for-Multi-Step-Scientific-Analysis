@@ -293,7 +293,7 @@ from sheldon.methods.sheldon.schemas import SUBMIT_SCHEMAS, ObservationDraft, Ve
 from sheldon.methods.sheldon.state import State  # noqa: E402
 
 from bmb_sheldon import selftest as selftest_script  # noqa: E402
-from bmb_sheldon.adapted import ADAPTATIONS, METHOD, early_stop, resolve  # noqa: E402
+from bmb_sheldon.adapted import ALL, METHOD, early_stop, resolve  # noqa: E402
 from bmb_sheldon.adapted.early_stop import StopCheckOut, gate  # noqa: E402
 from bmb_sheldon.adapted.method import AdaptedSheldon, loop_without_adaptations  # noqa: E402
 
@@ -306,7 +306,7 @@ def test_adapted_loop_is_sheldons_own_loop_plus_marked_blocks():
 
 def test_adaptation_names_resolve_to_an_explicit_ordered_list():
     assert resolve(None) == resolve([]) == []
-    assert resolve(["all"]) == resolve("all") == list(ADAPTATIONS)
+    assert resolve(["all"]) == resolve("all") == list(ALL)
     assert resolve(["early_stop", "early_stop", " "]) == ["early_stop"]
     with pytest.raises(ValueError, match="unknown SHELDON adaptation"):
         resolve(["early-stop"])
@@ -317,7 +317,7 @@ def test_config_picks_the_adapted_method_only_when_something_is_on(tmp_path):
     cfg = driver.build_config(base, tmp_path / "task.json", 60)
     assert cfg.method == "sheldon" and "adaptations" not in cfg.params
     cfg = driver.build_config({**base, "adaptations": ["all"]}, tmp_path / "task.json", 60)
-    assert cfg.method == METHOD and cfg.params["adaptations"] == list(ADAPTATIONS)
+    assert cfg.method == METHOD and cfg.params["adaptations"] == list(ALL)
     with pytest.raises(ValueError, match="method: sheldon"):
         driver.build_config({"sheldon": {"method": "direct"}, "adaptations": ["early_stop"]}, tmp_path / "t", 60)
 
@@ -490,3 +490,140 @@ def test_selftest_checks_early_stop_when_it_is_on(monkeypatch):
     out = io.StringIO()
     assert driver.selftest(conf, out)
     assert json.loads(out.getvalue().splitlines()[-1])["checks"]["early stop checked"] is True
+
+
+# -- golden_hypothesis (oracle ablation) -------------------------------------------------
+
+import random  # noqa: E402
+
+from sheldon.core.trace import current_trace  # noqa: E402
+from sheldon.core.types import Usage  # noqa: E402
+from sheldon.methods.sheldon import session as sheldon_session  # noqa: E402
+from sheldon.methods.sheldon.schemas import ExploreOut  # noqa: E402
+
+from bmb_sheldon.adapted import golden_hypothesis as golden  # noqa: E402
+
+
+def explore_out() -> ExploreOut:
+    return ExploreOut.model_validate({
+        "hypothesis_regions": [{"axis": "species", "name": "Bacillus subtilis", "description": "B. subtilis"},
+                               {"axis": "species", "name": "Bacillus cereus", "description": "B. cereus"}],
+        "observation_regions": [{"axis": "evidence", "name": "16S", "description": "16S rRNA"}],
+        "hypotheses": [{"statement": "The bacterium is Bacillus subtilis.", "rationale": "r1",
+                        "region": "Bacillus subtilis"},
+                       {"statement": "The bacterium is Bacillus cereus.", "rationale": "r2",
+                        "region": "Bacillus cereus"}]})
+
+
+def test_golden_round_session_is_sheldons_own_plus_one_marked_block():
+    ours = golden.without_hook(textwrap.dedent(inspect.getsource(golden.round_session)))
+    assert ours == textwrap.dedent(inspect.getsource(sheldon_session.round_session))
+    assert "# >>> adaptation: golden_hypothesis" in inspect.getsource(golden.round_session)
+
+
+def test_golden_answer_rides_on_stdin_and_matches_the_host_sentinel():
+    from bmbench.agents.sheldon import GOLDEN_SENTINEL  # noqa: PLC0415
+
+    assert GOLDEN_SENTINEL == golden.SENTINEL
+    assert golden.split_stdin("Question?") == ("Question?", None)
+    assert golden.split_stdin(golden.join_stdin("Question?", "SBS3")) == ("Question?", "SBS3")
+
+
+def test_golden_stdin_written_on_windows_still_splits_and_never_leaks():
+    crlf = golden.join_stdin("## Question\n\nWhich?\n", "SBS3").replace("\n", "\r\n")
+    assert golden.split_stdin(crlf) == ("## Question\n\nWhich?\n", "SBS3")
+    with pytest.raises(ValueError):  # a sentinel that does not split must stop the run
+        golden.split_stdin("Which?\n<<<bmb-golden-hypothesis>>> {\"answer\": \"SBS3\"}")
+
+
+def test_host_golden_stdin_file_has_no_carriage_returns(tmp_path):
+    from bmbench.agents.sheldon import SheldonAgent  # noqa: PLC0415
+
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("## Question\n\nWhich?\n", encoding="utf-8")
+    agent = SheldonAgent.__new__(SheldonAgent)
+    agent.cfg = type("C", (), {"golden_answers": {"p": "SBS3"}})()
+    out = agent.main_stdin("p", prompt, tmp_path)
+    assert b"\r" not in out.read_bytes()
+    assert golden.split_stdin(out.read_text(encoding="utf-8"))[1] == "SBS3"
+
+
+def test_golden_config_runs_the_adapted_method_without_naming_anything(tmp_path):
+    base = {"sheldon": {"model": "gpt-6-luna", "method": "sheldon", "params": {"mode": "session"}}}
+    cfg = driver.build_config(base, tmp_path / "task.json", 60, adapted=True)
+    assert cfg.method == METHOD and "adaptations" not in cfg.params
+    assert "golden" not in json.dumps({k: v for k, v in cfg.params.items() if k != "benchmark_opts"})
+
+
+def test_golden_placed_at_a_random_position_with_a_new_region():
+    w = golden.WriteOut(statement="The bacterium is Bacillus licheniformis.", rationale="r",
+                        region="Bacillus licheniformis",
+                        new_region=golden.NewRegion(axis="species", name="Bacillus licheniformis",
+                                                    description="B. licheniformis"))
+    seen = set()
+    for seed in range(20):
+        out, pos, region = golden.place(explore_out(), w, random.Random(seed))
+        assert len(out.hypotheses) == 3 and out.hypotheses[pos].statement == w.statement
+        assert out.hypotheses[pos].region == "Bacillus licheniformis" and region["axis"] == "species"
+        assert [r.name for r in out.hypothesis_regions].count("Bacillus licheniformis") == 1
+        seen.add(pos)
+    assert seen == {0, 1, 2}
+    # an existing region is reused, not duplicated
+    out, pos, region = golden.place(explore_out(), golden.WriteOut(statement="s", region="Bacillus cereus"),
+                                    random.Random(0))
+    assert region is None and len(out.hypothesis_regions) == 2
+
+
+def test_golden_rewrites_the_submit_call_and_drops_its_reasoning():
+    original = explore_out().model_dump()
+    messages = [
+        {"role": "user", "content": "explore"},
+        {"role": "assistant", "content": [{"type": ITEMS_BLOCK, "ref": "a"},
+                                          {"type": "tool_use", "id": "c1", "name": "run_shell", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c1", "content": "ok"}]},
+        {"role": "assistant", "content": [{"type": ITEMS_BLOCK, "ref": "b"}, {"type": "text", "text": "done"},
+                                          {"type": "tool_use", "id": "c2", "name": "submit_exploration",
+                                           "input": original}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "c2", "content": "recorded"}]},
+    ]
+    out, _, _ = golden.place(explore_out(), golden.WriteOut(statement="golden", region="Bacillus cereus"),
+                             random.Random(1))
+    assert golden.rewrite_history(messages, out)
+    blocks = messages[3]["content"]
+    assert [b["type"] for b in blocks] == ["text", "tool_use"]
+    assert [h["statement"] for h in blocks[1]["input"]["hypotheses"]] == [h.statement for h in out.hypotheses]
+    assert blocks[1]["input"]["observation_regions"] == original["observation_regions"]
+    assert messages[1]["content"][0]["type"] == ITEMS_BLOCK  # earlier replies keep their reasoning
+    # the transport replays the rewritten reply from its blocks
+    items = ResponsesBackend(base_url="", api_key="", client=object())._input({"messages": messages})
+    calls = [i for i in items if i.get("type") == "function_call"]
+    assert "golden" in calls[-1]["arguments"]
+    assert not golden.rewrite_history([{"role": "user", "content": "x"}], out)
+
+
+def test_golden_writer_runs_with_the_trace_off():
+    from sheldon.core.trace import Trace, reset_trace, use_trace  # noqa: PLC0415
+
+    seen = {}
+
+    class LLM:
+        async def complete(self, prompt, system=None, schema=None, tag=""):
+            seen.update(trace=current_trace(), prompt=prompt, system=system)
+            return SimpleNamespace(parsed=golden.WriteOut(statement="The bacterium is X.", rationale="r",
+                                                          region="Bacillus cereus"), usage=Usage())
+
+    run = SimpleNamespace(ctx=SimpleNamespace(llm=LLM(), budget=SimpleNamespace(charge=lambda u: None)),
+                          task=SimpleNamespace(question="Which bacterium?"))
+    asked = SimpleNamespace(parsed=explore_out())
+    sess = SimpleNamespace(messages=[])
+    trace = Trace.__new__(Trace)
+    token = use_trace(trace)
+    try:
+        golden.arm("Bacillus licheniformis")
+        asyncio.run(golden.inject(run, sess, asked, random.Random(0)))
+        assert golden.record["injected"] and not golden.record["history_rewritten"]
+    finally:
+        reset_trace(token)
+        golden.arm(None)
+    assert seen["trace"] is None and "Bacillus licheniformis" in seen["prompt"]
+    assert len(asked.parsed.hypotheses) == 3

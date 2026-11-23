@@ -243,14 +243,15 @@ def test_no_nudge_for_an_empty_answer(tmp_path, monkeypatch):
 def test_adaptation_names_match_the_runtime_registry():
     import importlib.util  # noqa: PLC0415
 
-    from bmbench.config import SHELDON_ADAPTATIONS  # noqa: PLC0415
+    from bmbench.config import SHELDON_ADAPTATIONS, SHELDON_ADAPTATIONS_ALL  # noqa: PLC0415
 
     path = ROOT / "bmbench/agents/sheldon_runtime/bmb_sheldon/adapted/__init__.py"
     spec = importlib.util.spec_from_file_location("bmb_adapted_names", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)  # imports nothing from SHELDON
     assert mod.ADAPTATIONS == SHELDON_ADAPTATIONS
-    assert mod.resolve(["all"]) == list(SHELDON_ADAPTATIONS)
+    assert mod.ALL == SHELDON_ADAPTATIONS_ALL
+    assert mod.resolve(["all"]) == list(SHELDON_ADAPTATIONS_ALL)
 
 
 def test_adaptations_resolve_into_the_run_name_and_the_sandbox_config():
@@ -289,3 +290,40 @@ def test_early_stop_checks_in_the_transcript():
     passed = {"round": 1, "passed": True, "failed": [], "check": {"candidate_answer": "Homo sapiens"}}
     assert _event_line("early_stop.check", held) == "early stop check after round 1: continue (open: BLAST pending)"
     assert _event_line("early_stop.check", passed) == "early stop after round 1: settled on 'Homo sapiens'"
+
+
+def test_golden_answer_goes_only_into_a_host_stdin_file(tmp_path):
+    a = SheldonAgent(load_config("configs/sheldon_preview.yaml").agent)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("Question?", encoding="utf-8")
+    adir = tmp_path / "attempt-1"
+    adir.mkdir()
+    assert a.main_stdin("hb035", prompt, adir) == prompt  # no golden answers: the prompt itself
+    a.cfg.golden_answers = {"hb035": "hsa-let-7a-5p"}
+    assert a.main_stdin("hb002", prompt, adir) == prompt
+    path = a.main_stdin("hb035", prompt, adir)
+    assert path.parent == adir and path.parent != adir / "workspace"
+    assert path.read_text(encoding="utf-8").startswith("Question?\n<<<bmb-golden-hypothesis>>>\n")
+    assert "hsa-let-7a-5p" not in json.dumps(a.env())
+
+
+def test_golden_answers_need_sheldon_in_session_mode(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("agent: {type: sheldon, golden_answers: {hb035: x}, sheldon: {params: {mode: staged}}}\n")
+    with pytest.raises(ValueError, match="mode: session"):
+        load_config(cfg)
+    cfg.write_text("agent: {type: codex, golden_answers: {hb035: x}}\n")
+    with pytest.raises(ValueError, match="SHELDON agent only"):
+        load_config(cfg)
+
+
+def test_golden_answers_can_be_read_from_a_file(tmp_path):
+    answers = tmp_path / "answers.yaml"
+    answers.write_text("hb035: hsa-let-7a-5p\n")
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(f"agent: {{type: sheldon, golden_answers: '{answers}', sheldon: {{params: {{mode: session}}}}}}\n")
+    assert load_config(cfg).agent.golden_answers == {"hb035": "hsa-let-7a-5p"}
+    cfg.write_text(f"agent: {{type: sheldon, golden_answers: '{tmp_path / 'missing.yaml'}', "
+                   "sheldon: {params: {mode: session}}}\n")
+    with pytest.raises(ValueError, match="no file"):
+        load_config(cfg)

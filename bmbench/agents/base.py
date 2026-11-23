@@ -76,6 +76,16 @@ class Agent(ABC):
     def parse(self, stdout_path: Path, stderr_path: Path, segment: Segment) -> Segment:
         """Fill `segment` (steps, final text, cost, turns, errors) from the CLI's output."""
 
+    def main_stdin(self, problem_id: str, prompt_path: Path, attempt_dir: Path) -> Path:
+        """The file fed to the main command's stdin: the problem prompt, unless the agent
+        adds to it (SHELDON's golden_hypothesis ablation, or its counterpart for other
+        agents, bmbench/golden_hints.py)."""
+        if getattr(self.cfg, "golden_hypotheses_from", None):
+            from bmbench.golden_hints import main_stdin  # noqa: PLC0415
+
+            return main_stdin(self.cfg.golden_hypotheses_from, problem_id, prompt_path, attempt_dir)
+        return prompt_path
+
     def env(self) -> dict[str, str]:
         """Non-secret environment for the agent process."""
         return dict(self.cfg.env)

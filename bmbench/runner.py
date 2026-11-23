@@ -73,7 +73,7 @@ def problem_prompt(problem_dir: Path, prompt: str) -> Path:
     problem_dir.mkdir(parents=True, exist_ok=True)
     path = problem_dir / "prompt.md"
     try:
-        with open(path, "x", encoding="utf-8") as f:
+        with open(path, "x", encoding="utf-8", newline="\n") as f:  # LF on Windows too: it is stdin
             f.write(prompt)
     except FileExistsError:
         if path.read_text(encoding="utf-8") != prompt:
@@ -344,7 +344,7 @@ async def run_attempt(cfg: RunConfig, agent: Agent, problem: Problem, attempt: i
 
     try:
         await box.start()
-        seg = await invoke("main", prompt_path, sb.timeout_s, resume=False)
+        seg = await invoke("main", agent.main_stdin(problem.id, prompt_path, adir), sb.timeout_s, resume=False)
         # An agent that cannot resume (SHELDON) closes out within its own command.
         while agent.resumable:
             answer, _ = final_answer(segments)

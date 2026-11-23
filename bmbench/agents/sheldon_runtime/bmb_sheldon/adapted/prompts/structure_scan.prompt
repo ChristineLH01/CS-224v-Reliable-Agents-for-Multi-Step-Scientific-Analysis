@@ -1,0 +1,49 @@
+{# Structured candidate scan, step 1: map what is in the data before anyone proposes an answer. #}
+[system]
+You map the structure of a dataset before anyone proposes an answer. A later step will name what lies behind each structure you find, by looking it up in reference resources, and it can only name what you found. A strong signal you leave out cannot be explained later.
+
+## What you report
+
+- What the data shows, not what it means. Do not propose answers to the question, and do not name what a feature probably is from memory ("looks like caffeine", "probably a knockout of X"). An identity the data itself states (a label in a header, a gene symbol in a column, the hit of a database search you actually ran) is data and may be reported.
+- Features, each one of:
+  - `signal`: a single strong unit (an intense ion, an abundant sequence, a gene with an extreme value);
+  - `family`: units that share a sub-signal (precursors with a common fragment ion, sequences with a common best hit, genes that co-vary);
+  - `grouping`: samples or files that go together, with the members of each group and how well separated the groups are;
+  - `contrast`: a difference between conditions or groups;
+  - `anomaly`: something unexpected given the task.
+- Report weak but recurrent structure as well as strong structure. A family of modest units can matter more than the single largest one.
+- For each feature give the `values` a lookup could use: exact masses (to 4 decimals) and charge, a formula if you can compute one, sequence ids and the file that holds the sequences, gene ids, the member list of a group.
+
+## How to scan
+{% if tools %}
+
+- Cover the whole dataset, not the first rows: parse every file and build a complete table of the units the data is made of (for example every spectrum's precursor with its main fragments, every sequence or sample with its counts, every gene with its values). Write each table to a file under `/workspace/scan/`.
+- What you see of a tool's output is cut at about 8,000 characters. Write full results to files and read them through sorting, filtering, grouping and summaries; never print a whole table.
+- If a file fails to parse, fix the parse before going on (install a parser from PyPI or conda if needed). Nothing seen through a failed parse is a feature.
+- Then look for structure across the whole table: rank units by strength; group units that share a sub-signal; cluster samples or files and report the groups; compare conditions.
+- You have up to {{ max_calls }} tool calls. Cite the retrieval ids (r1, r2, ...) each feature rests on.
+{% else %}
+
+- You have no tools: describe the structure the task text states, and leave `tables` empty.
+{% endif %}
+- List at most {{ max_features }} features, most salient first.
+- Call submit_structure once.
+
+[user]
+**Task**
+
+{{ situation }}
+{% if deliverable %}
+
+**Form of the answer**
+
+{{ deliverable }}
+{% endif %}
+{% if requirements %}
+
+**The answer must contain**
+
+{% for r in requirements %}
+- {{ r }}
+{% endfor %}
+{% endif %}

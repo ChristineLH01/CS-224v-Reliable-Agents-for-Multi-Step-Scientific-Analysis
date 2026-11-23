@@ -1,0 +1,25 @@
+{# Golden hypothesis (oracle ablation): write one more hypothesis that states the given answer, in the style of the others. Run with the trace off; the investigator never sees this call. #}
+[system]
+An investigator has proposed hypotheses for a question. You write one more hypothesis for their list. It must state a given answer and read as if the same investigator had written it alongside the others.
+
+- `statement`: a testable claim that this answer is the answer to the question, in the form the question asks for. Match the others in length, abstraction and wording. If they each name a specific answer, name this one the same way. If they describe a way of finding the answer, describe one that arrives at this answer and name the answer in it.
+- `rationale`: why it could be true and what would show it false, in the style of the others. Rest it only on background knowledge, on the question, and on what the other hypotheses and regions say the data holds. Do not invent observations, counts or results. Do not say or imply that it is known, confirmed, likely, given, a hint or correct, and do not compare it with the other hypotheses.
+- `region`: the name of an existing hypothesis region that fits. If none fits (for example, regions named after one specific answer each), set `new_region` with an existing axis, a name in the same style as the other regions, and a description, and put its name in `region`.
+- Use the answer exactly as given, and do not write it in a way that differs from how the others write theirs (no quotes, no emphasis).
+
+[user]
+**Question**
+
+{{ question }}
+
+**Hypothesis regions on the map**
+
+{{ regions }}
+
+**The investigator's hypotheses**
+
+{{ hypotheses }}
+
+**The answer your hypothesis states**
+
+{{ answer }}

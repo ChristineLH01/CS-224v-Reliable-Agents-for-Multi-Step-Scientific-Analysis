@@ -20,7 +20,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: bmbench's changes to SHELDON, in the order they were added; `all` means these. The
 #: same names as bmb_sheldon.adapted.ADAPTATIONS (the runtime's registry; a test keeps
 #: the two equal).
-SHELDON_ADAPTATIONS = ("early_stop", "shared_analysis_state")
+SHELDON_ADAPTATIONS = ("early_stop", "shared_analysis_state", "candidate_scan", "plan_keeps_question",
+                       "keep_answer_rivals", "keep_neutral_hypotheses")
+#: what `[all]` expands to (bmb_sheldon.adapted.ALL): only the two changes the existing `[all]`
+#: configs ran with, so they keep their meaning; later changes are enabled by name
+SHELDON_ADAPTATIONS_ALL = ("early_stop", "shared_analysis_state")
 
 #: Auth variables forwarded (by name, never by value on a command line) into the sandbox.
 SECRET_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
@@ -73,6 +77,18 @@ class AgentConfig:
     # every one. Empty: baseline SHELDON. Resolved to the explicit list when the config is
     # loaded, so the run folder and its config.yaml name exactly what ran.
     adaptations: list[str] = field(default_factory=list)
+    # SHELDON only, an oracle ablation: problem id -> the answer a hidden extra round-1
+    # hypothesis states (bmb_sheldon/adapted/golden_hypothesis.py). It reaches the sandbox
+    # only on the driver's stdin, never in its environment or files; problems not listed
+    # run unchanged. Not in `adaptations`, which the sandbox can read. In a config it may be
+    # a path to a YAML file holding that map (configs use data/golden_answers.yaml, which
+    # git ignores, so no committed file states an answer); loading reads it in.
+    golden_answers: dict[str, str] = field(default_factory=dict)
+    # Codex / Claude Code only, the same oracle ablation for agents without hypothesis
+    # rounds: a SHELDON golden_answers run directory; each attempt's prompt gets the four
+    # round-1 hypotheses of the same attempt there (the golden one among them, unmarked) as
+    # unverified candidates (bmbench/golden_hints.py). None: the prompt unchanged.
+    golden_hypotheses_from: str | None = None
 
 
 @dataclass
@@ -168,7 +184,7 @@ def resolve_adaptations(names: Any) -> list[str]:
     if unknown:
         raise ValueError(f"unknown SHELDON adaptation(s): {', '.join(unknown)}; "
                          f"known: {', '.join(SHELDON_ADAPTATIONS)} (or all)")
-    wanted = set(SHELDON_ADAPTATIONS) if "all" in given else set(given)
+    wanted = set(given) - {"all"} | (set(SHELDON_ADAPTATIONS_ALL) if "all" in given else set())
     return [n for n in SHELDON_ADAPTATIONS if n in wanted]
 
 
@@ -230,6 +246,27 @@ def load_config(path: str | Path | None, overrides: list[str] | None = None) -> 
             data = yaml.safe_load(f) or {}
     data = apply_overrides(data, overrides or [])
     agent = data.get("agent")
+    if isinstance(agent, dict) and isinstance(agent.get("golden_answers"), str):
+        # a path to a YAML map (problem id -> answer), kept under the git-ignored data/ so
+        # that no committed config holds an answer
+        answers_path = resolve(agent["golden_answers"])
+        if not answers_path.is_file():
+            raise ValueError(f"agent.golden_answers: no file at {agent['golden_answers']}")
+        with open(answers_path, encoding="utf-8") as f:
+            answers = yaml.safe_load(f) or {}
+        if not isinstance(answers, dict):
+            raise ValueError(f"agent.golden_answers: {agent['golden_answers']} is not a problem id -> answer map")
+        agent["golden_answers"] = {str(k): str(v) for k, v in answers.items()}
+    if isinstance(agent, dict) and agent.get("golden_answers"):
+        if agent.get("type", AgentConfig.type) != "sheldon":
+            raise ValueError("agent.golden_answers is for the SHELDON agent only")
+        if (agent.get("sheldon") or {}).get("params", {}).get("mode") != "session":
+            raise ValueError("agent.golden_answers needs agent.sheldon.params.mode: session")
+    if isinstance(agent, dict) and agent.get("golden_hypotheses_from"):
+        if agent.get("type", AgentConfig.type) == "sheldon":
+            raise ValueError("agent.golden_hypotheses_from is for agents other than SHELDON (use golden_answers)")
+        if not (resolve(agent["golden_hypotheses_from"]) / "problems").is_dir():
+            raise ValueError(f"agent.golden_hypotheses_from: no run at {agent['golden_hypotheses_from']}")
     if isinstance(agent, dict) and agent.get("adaptations"):
         if agent.get("type", AgentConfig.type) != "sheldon":
             raise ValueError("agent.adaptations is for the SHELDON agent only")

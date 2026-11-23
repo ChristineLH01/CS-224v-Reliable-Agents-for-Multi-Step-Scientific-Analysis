@@ -63,7 +63,9 @@ def shell_probes(spec: Any, workdir: str) -> list[Any]:
     return out
 
 
-def build_config(conf: dict[str, Any], task_file: Path, max_seconds: float) -> Any:
+def build_config(conf: dict[str, Any], task_file: Path, max_seconds: float, adapted: bool = False) -> Any:
+    """SHELDON's Config. `adapted` runs the adapted method even with no adaptation named
+    (the golden_hypothesis ablation, which is armed in-process and named nowhere)."""
     from sheldon.core.config import Config  # noqa: PLC0415
 
     from bmb_sheldon.benchmark import NAME  # noqa: PLC0415
@@ -75,11 +77,12 @@ def build_config(conf: dict[str, Any], task_file: Path, max_seconds: float) -> A
     params["probes"] = shell_probes(params.get("probes", ["run_shell"]), conf.get("workdir") or "/workspace")
     params["benchmark_opts"] = {**(params.get("benchmark_opts") or {}), "task_file": str(task_file)}
     adaptations = resolve(conf.get("adaptations"))
-    if adaptations:
+    if adaptations or adapted:
         if fields.get("method", "sheldon") != "sheldon":
             raise ValueError(f"adaptations change SHELDON's own method (method: sheldon), not {fields['method']!r}")
         fields["method"] = METHOD
-        params["adaptations"] = adaptations
+        if adaptations:
+            params["adaptations"] = adaptations
         if "shared_analysis_state" in adaptations:
             params["analysis_archive_dir"] = str(Path(conf.get("home") or "/home/agent/.sheldon") / "analysis")
     return Config(**fields, params=params, benchmark=NAME, split="attempt", limit=None, tasks="", seed=0,
@@ -130,6 +133,12 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
     from bmb_sheldon.watchdog import TimeLimit  # noqa: PLC0415
 
     quiet_stream_shutdown(asyncio.get_running_loop())
+    from bmb_sheldon.adapted import golden_hypothesis  # noqa: PLC0415
+
+    # The golden answer, if any, rides on stdin after the prompt; it is split off before
+    # anything is written, and held in process memory only (see golden_hypothesis.py).
+    prompt, golden = golden_hypothesis.split_stdin(prompt)
+    golden_hypothesis.arm(golden)
 
     home = Path(conf.get("home") or "/home/agent/.sheldon")
     home.mkdir(parents=True, exist_ok=True)
@@ -140,7 +149,7 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
     task_file.write_text(json.dumps({"id": task_id, "question": prompt}), encoding="utf-8")
 
     deadline = T0 + time_limit_s
-    cfg = build_config(conf, task_file, max(1.0, deadline - time.monotonic()))
+    cfg = build_config(conf, task_file, max(1.0, deadline - time.monotonic()), adapted=golden_hypothesis.armed())
     from sheldon.core.io import read_jsonl  # noqa: PLC0415
     from sheldon.runner import run_dir, run_experiment  # noqa: PLC0415
 
@@ -186,6 +195,15 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
         result["early_stop"] = extra["early_stop"]
     if "shared_analysis_state" in extra:
         result["shared_analysis_state"] = extra["shared_analysis_state"]
+    if "candidate_scan" in extra:
+        result["candidate_scan"] = extra["candidate_scan"]
+    if "plan_keeps_question" in extra:  # one entry: {action, missing?}
+        result["plan_keeps_question"] = extra["plan_keeps_question"]
+    if golden_hypothesis.armed():  # stdout only: the host reads it, the sandbox never holds it
+        result["golden_hypothesis"] = golden_hypothesis.report(pred.get("belief"))
+    for key in ("keep_answer_rivals", "keep_neutral_hypotheses"):  # one entry per round that acted
+        if key in extra:
+            result[key] = extra[key]
     emit(out, "result", **result)
     return result
 
@@ -297,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if selftest(conf, out) else 1
     if a.ping:
         return 0 if asyncio.run(ping(conf, out))["answer"] == "OK" else 1
-    prompt = sys.stdin.read()
+    prompt = sys.stdin.read().replace("\r\n", "\n")  # a stdin file written on Windows
     if not prompt.strip():
         emit(out, "result", answer="", error="no prompt on stdin")
         return 2

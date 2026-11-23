@@ -34,12 +34,15 @@ from bmbench.trajectory import Segment, Step, extract_answer
 SHELDON_COMMIT = "7fbf027d1fb414443612d4ad2661b396c8352cd3"
 PYTHON = "/opt/sheldon/.venv/bin/python"
 HOME = "/home/agent/.sheldon"
+#: bmb_sheldon.adapted.golden_hypothesis.SENTINEL (that package needs SHELDON installed);
+#: a test keeps the two equal
+GOLDEN_SENTINEL = "\n<<<bmb-golden-hypothesis>>>\n"
 #: exit status of coreutils `timeout` when its limit fired (137 if it had to SIGKILL)
 TIMEOUT_EXIT_CODES = (124, 137)
 #: SHELDON's stage events worth a line in the transcript and the trajectory
-STAGE_EVENTS = ("plan", "merge.done", "explore.done", "select.done", "candidate_analysis.revision",
+STAGE_EVENTS = ("plan", "candidate_scan.done", "merge.done", "explore.done", "select.done", "candidate_analysis.revision",
                 "candidate_analysis.done", "comparative_analysis.done", "exploit.done", "round.done",
-                "early_stop.check", "finalize", "budget.stop", "error")
+                "early_stop.check", "keep_neutral_hypotheses.kept", "keep_answer_rivals.check", "finalize", "budget.stop", "error")
 
 
 class SheldonAgent(Agent):
@@ -90,6 +93,19 @@ class SheldonAgent(Agent):
             pass
         env.update(self.cfg.env)
         return env
+
+    def main_stdin(self, problem_id: str, prompt_path: Path, attempt_dir: Path) -> Path:
+        """With a golden answer for this problem, the prompt plus the answer after
+        golden_hypothesis's sentinel, in a host-only file of the attempt (the attempt
+        directory is not mounted into the sandbox)."""
+        answer = str((self.cfg.golden_answers or {}).get(problem_id) or "").strip()
+        if not answer:
+            return prompt_path
+        path = attempt_dir / "stdin.main.txt"
+        path.write_text(prompt_path.read_text(encoding="utf-8") + GOLDEN_SENTINEL
+                        + json.dumps({"answer": answer}, ensure_ascii=False), encoding="utf-8",
+                        newline="\n")  # not CRLF on Windows: the driver splits on "\n<sentinel>\n"
+        return path
 
     # -- what the driver printed ------------------------------------------------------
 
@@ -185,6 +201,13 @@ class SheldonAgent(Agent):
                      adaptations=start.get("adaptations") or [])
         if "early_stop" in info:
             extra["early_stop"] = info["early_stop"]
+        if "candidate_scan" in info:
+            extra["candidate_scan"] = info["candidate_scan"]
+        if "plan_keeps_question" in info:
+            extra["plan_keeps_question"] = info["plan_keeps_question"]
+        for key in ("keep_answer_rivals", "keep_neutral_hypotheses"):
+            if key in info:
+                extra[key] = info[key]
         found = traces(session_root)
         if found:
             extra.update(Recorded(found[0]).command_stats())
@@ -248,7 +271,9 @@ def stage_name(tag: str) -> str:
         it = f" · iteration {parts[2]}" if len(parts) > 2 else ""
         return f"candidate analysis · {hyp}{it}"
     return {"merge": "merge regions", "comparative_analysis": "comparative analysis",
-            "early_stop": "early stop check"}.get(tag, tag)
+            "early_stop": "early stop check", "candidate_scan": "candidate scan",
+            "candidate_scan.extend": "candidate scan · extend",
+            "keep_answer_rivals": "answer-rival check"}.get(tag, tag)
 
 
 class Recorded:
@@ -297,7 +322,7 @@ class Recorded:
                 finalizing = True
             rnd: int | None = None if finalizing else rounds_done + 1
             if kind == "llm":
-                if tag == "plan":
+                if tag.split(".")[0] in ("plan", "candidate_scan"):  # both before round 1
                     rnd = 0
                 elif tag == "early_stop":  # asked after its round's round.done
                     rnd = rounds_done
@@ -310,7 +335,7 @@ class Recorded:
                             "parsed": e.get("parsed"), "uses": uses, "stop": e.get("stop_reason"),
                             "usage": e.get("usage") or {}})
             elif kind in STAGE_EVENTS or str(kind).endswith(".recovered"):
-                if kind == "plan":
+                if kind in ("plan", "candidate_scan.done"):
                     rnd = 0
                 by_event = kind in ("round.done", "early_stop.check")
                 out.append({"kind": kind, "round": e.get("round", rnd) if by_event else rnd, "event": e})
@@ -479,6 +504,16 @@ def _event_line(kind: str, e: dict[str, Any]) -> str:
             return f"early stop after round {e.get('round')}: settled on {answer!r}"
         return (f"early stop check after round {e.get('round')}: continue ("
                 + "; ".join(str(f) for f in e.get("failed") or [])[:400] + ")")
+    if kind == "keep_neutral_hypotheses.kept":
+        return f"kept without evidence after round {e.get('round')}: " + ", ".join(
+            str(k.get("hypothesis")) for k in e.get("kept") or [])
+    if kind == "keep_answer_rivals.check":
+        rows = "; ".join(f"{p.get('shelved')} vs {p.get('successor')}: "
+                         f"{'kept as rival' if p.get('revive') else p.get('why', 'not kept')}" for p in e.get("pairs") or [])
+        return f"answer-rival check after round {e.get('round')}: {rows}"[:500]
+    if kind == "candidate_scan.done":
+        answers = ", ".join(str(c.get("answer"))[:60] for c in e.get("candidates") or []) or "none"
+        return f"candidate scan: {len(e.get('candidates') or [])} candidate(s) ({answers[:400]}); {len(e.get('tests') or [])} test(s)"
     if kind == "finalize":
         return f"finalize: answer {str(e.get('answer'))[:200]!r} (from {e.get('source')})"
     if kind == "merge.done":

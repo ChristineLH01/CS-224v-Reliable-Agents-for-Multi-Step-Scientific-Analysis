@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -145,3 +146,36 @@ def test_subagent_commands_come_from_rollouts(tmp_path):
     assert seg.steps[0].parent == "Dirac" and "esearch -db sra" in seg.steps[0].tool_input["code"]
     assert seg.steps[1].text == "done"
     assert final_answer([seg]) == (None, "")  # never a source of the answer
+
+
+def test_golden_hypotheses_from_a_sheldon_run(tmp_path):
+    import pytest
+
+    from bmbench.agents.codex import CodexAgent
+    from bmbench.config import load_config
+    from bmbench.golden_hints import ANCHOR, HEADER
+
+    src = "runs/golden_hypothesis_5q_3attempts_20261116"
+    if not (Path(src) / "problems").is_dir():
+        pytest.skip("source SHELDON run not present")
+    agent = CodexAgent(load_config("configs/codex_golden_hypothesis_5q.yaml").agent)
+    prompt = Path(src) / "problems" / "hb024" / "prompt.md"
+    adir = tmp_path / "attempt-1"
+    adir.mkdir()
+    path = agent.main_stdin("hb024", prompt, adir)
+    text = path.read_text(encoding="utf-8")
+    assert path.parent == adir and HEADER in text and text.index(HEADER) < text.index(ANCHOR.strip())
+    assert "Boiga dendrophila" in text and "golden" not in text.lower()
+    hint = json.loads((adir / "golden_hint.json").read_text())
+    assert (hint["position"], hint["of"]) == (3, 4)
+
+
+def test_golden_hypotheses_from_is_not_for_sheldon(tmp_path):
+    import pytest
+
+    from bmbench.config import load_config
+
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("agent: {type: sheldon, golden_hypotheses_from: runs}\n")
+    with pytest.raises(ValueError, match="other than SHELDON"):
+        load_config(cfg)

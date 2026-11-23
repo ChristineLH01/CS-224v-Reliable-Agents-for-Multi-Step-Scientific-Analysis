@@ -16,7 +16,18 @@ from sheldon.methods.sheldon import candidate_analysis, resume, stages
 from sheldon.methods.sheldon.loop import Sheldon, finalize, round_staged
 from sheldon.methods.sheldon.run import Run
 
-from bmb_sheldon.adapted import ADAPTATIONS, METHOD, early_stop, resolve, shared_analysis_state
+from bmb_sheldon.adapted import (
+    ADAPTATIONS,
+    METHOD,
+    candidate_scan,
+    early_stop,
+    golden_hypothesis,
+    keep_answer_rivals,
+    keep_neutral_hypotheses,
+    plan_keeps_question,
+    resolve,
+    shared_analysis_state,
+)
 
 
 @methods.register(METHOD)
@@ -32,17 +43,37 @@ class AdaptedSheldon(Sheldon):
         return name in self.adaptations()
 
     async def run(self, task: Task, ctx: RunContext) -> Prediction:
+        # Only the scan's offline recall mode exists: with it on, the run ends after the scan.
+        scan_only = self.on(candidate_scan.NAME)
+        if scan_only and not self.param("candidate_scan_only", False):
+            raise ValueError("candidate_scan: only the offline recall mode is implemented; "
+                             "set candidate_scan_only: true")
         analysis = None
         if self.on(shared_analysis_state.NAME):
             ctx, analysis = shared_analysis_state.attach(ctx, self.param)
             ctx.scratch[shared_analysis_state.NAME] = analysis
         try:
-            pred = await self._loop(task, ctx)
+            if scan_only:
+                pred = await candidate_scan.scan_only(task, ctx, self.param, analysis)
+            else:
+                pred = await self._loop(task, ctx)
         finally:
             if analysis is not None:
                 analysis.write()
         checks = [{k: e.get(k) for k in ("round", "passed", "failed")} for e in ctx.trace.of_kind(early_stop.EVENT)]
         pred.extra = {**(pred.extra or {}), "adaptations": self.adaptations(), "early_stop": checks}
+        if self.on(plan_keeps_question.NAME):
+            pred.extra[plan_keeps_question.NAME] = [
+                {k: v for k, v in e.items() if k in ("action", "missing")}
+                for e in ctx.trace.of_kind(plan_keeps_question.EVENT)]
+        if self.on(keep_answer_rivals.NAME):
+            pred.extra[keep_answer_rivals.NAME] = [
+                {k: e.get(k) for k in ("round", "revived", "pairs", "error") if k in e}
+                for e in ctx.trace.of_kind(keep_answer_rivals.EVENT)]
+        if self.on(keep_neutral_hypotheses.NAME):
+            pred.extra[keep_neutral_hypotheses.NAME] = [
+                {"round": e.get("round"), "kept": [k["hypothesis"] for k in e.get("kept") or []]}
+                for e in ctx.trace.of_kind(keep_neutral_hypotheses.EVENT)]
         if analysis is not None:
             pred.extra[shared_analysis_state.NAME] = {"entries": len(analysis.entries),
                                                       "archive": str(analysis.archive or analysis.root)}
@@ -70,6 +101,10 @@ class AdaptedSheldon(Sheldon):
             done = resume.apply(run)
             if not done:
                 usage += await stages.plan(run)
+                # >>> adaptation: plan_keeps_question
+                if self.on(plan_keeps_question.NAME):
+                    plan_keeps_question.apply(run)
+                # <<< adaptation: plan_keeps_question
                 await candidate_analysis.measure_seed(run)
             cap = ctx.budget.max_rounds or int(self.param("rounds", 6))
             round_costs: list[float] = []
@@ -100,10 +135,28 @@ class AdaptedSheldon(Sheldon):
                 if mode == "session":
                     from sheldon.methods.sheldon import session  # noqa: PLC0415
 
+                    # >>> adaptation: golden_hypothesis
+                    # Armed by the driver, never named in `adaptations` (see golden_hypothesis.py).
+                    if golden_hypothesis.armed():
+                        session = golden_hypothesis
+                    # <<< adaptation: golden_hypothesis
                     u, tested = await session.round_session(run)
                 else:
+                    # >>> adaptation: golden_hypothesis
+                    if golden_hypothesis.armed():
+                        raise ValueError("golden_hypothesis: session mode only")
+                    # <<< adaptation: golden_hypothesis
                     u, tested = await round_staged(run)
                 usage += u
+                # >>> adaptation: keep_neutral_hypotheses
+                # Both undo shelvings made in the round, before anything reads its end.
+                if self.on(keep_neutral_hypotheses.NAME):
+                    keep_neutral_hypotheses.apply(run)
+                # <<< adaptation: keep_neutral_hypotheses
+                # >>> adaptation: keep_answer_rivals
+                if self.on(keep_answer_rivals.NAME):
+                    usage += await keep_answer_rivals.apply(run)
+                # <<< adaptation: keep_answer_rivals
                 round_costs.append(ctx.budget.spent.cost_usd - opened_at)
                 run.state.close_round()
                 ctx.trace.log("round.done", round=round_i, best=run.state.best(),

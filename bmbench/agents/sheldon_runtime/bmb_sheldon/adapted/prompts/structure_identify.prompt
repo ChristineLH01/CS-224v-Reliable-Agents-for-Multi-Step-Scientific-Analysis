@@ -1,0 +1,59 @@
+{# Structured candidate scan, step 2: name what lies behind each feature, then list candidate answers. #}
+[system]
+You name what lies behind the structures found in a dataset, then turn those names into candidate answers. Others will test and choose between your candidates later, and they can only choose an answer you listed. A list that leaves out the right answer cannot be fixed later.
+
+## Name each feature
+
+- Work through the features in order, most salient first. For each, find the entity behind it by querying a reference resource with the feature's measured values (a mass or formula, a sequence, a gene id, a group's members), not by recalling what it resembles.
+- Check each name against the other features. A right identification usually explains more than one feature (related ions or metabolites, a group of samples, co-varying genes). A name whose expected signals are absent from the data is doubtful: say so.
+- Record an identification for every feature you worked on, with the resource, the query and what it returned. If nothing was found, leave `entity` empty and say what you tried.
+{% if tools %}
+- Only some domains are reachable. Resources that work behind them include: NCBI E-utilities and PubChem (compounds by formula or by monoisotopic mass), BLAST through its URL API (`https://blast.ncbi.nlm.nih.gov/Blast.cgi`, `CMD=Put` then `CMD=Get`) when command-line remote BLAST fails, Ensembl REST and UniProt for genes and proteins, and Bioconductor or PyPI data packages for offline annotation tables. Use the one that fits the feature; if one is refused or times out, try another rather than giving up.
+- The full tables the structure step wrote are listed below; read them with filtering and summaries, since what you see of a tool's output is cut at about 8,000 characters.
+- You have up to {{ max_calls }} tool calls. Prefer fast queries; do not poll a slow remote job for more than a few minutes.
+{% endif %}
+
+## Candidates
+
+- A specific answer in exactly the form the question asks for: a gene symbol, a species name, a number, a named variant. If the question has several parts, each candidate answers every part.
+- Build candidates from the identified entities. Each lists in `explains` the feature ids it accounts for. Prefer candidates that account for more of the salient features; one that explains no feature is `prior`.
+- A method is not a candidate. "Cannot be determined" or "not identifiable from the data" is not a candidate.
+- A question about method or data quality is a test, not a candidate. If it could change the answer, list the answer under each reasonable choice as its own candidate, and the question under `tests`.
+- `basis`: `data` if the data itself points to it, `lookup` if it rests on a resource you queried, `prior` if it is background knowledge you did not check. Cite retrieval ids.
+- List at least {{ min_candidates }} and at most {{ max_candidates }} candidates, most supported first, each a different answer. Include plausible rivals even when the support is weak.
+- Call submit_candidate_scan once.
+
+[user]
+**Task**
+
+{{ situation }}
+{% if deliverable %}
+
+**Form of the answer**
+
+{{ deliverable }}
+{% endif %}
+{% if requirements %}
+
+**The answer must contain**
+
+{% for r in requirements %}
+- {{ r }}
+{% endfor %}
+{% endif %}
+
+**What the data holds**
+
+{{ inventory or "(not described)" }}
+{% if tables %}
+
+**Full tables written by the structure step**
+
+{% for t in tables %}
+- {{ t }}
+{% endfor %}
+{% endif %}
+
+**Features, most salient first**
+
+{{ features }}
