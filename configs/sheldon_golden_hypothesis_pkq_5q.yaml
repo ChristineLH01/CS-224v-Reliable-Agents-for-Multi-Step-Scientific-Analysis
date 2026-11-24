@@ -1,9 +1,10 @@
 # Oracle ablation (golden_hypothesis) with plan_keeps_question on: the same run as
 # configs/sheldon_golden_hypothesis_5q.yaml, plus the adaptation that keeps the question in
 # the plan's situation (in 4 of that run's 15 attempts, plan put it only in the deliverable).
-# Started on another machine (Windows, image bmbench-sandbox:latest built 2026-11-20 from the
-# current runtime); finished here on bmbench-sandbox:golden-hypothesis, whose bmb_sheldon
-# differs from the current runtime only in a docstring.
+# The 13 attempts first run on Windows are invalid: CRLF stdin hid the golden sentinel, so the
+# answer stayed in the prompt (kept in ..._invalid-crlf/). All 15 used attempts ran on macOS on
+# bmbench-sandbox:golden-hypothesis, whose bmb_sheldon differs from the runtime of the time only
+# in a docstring. Results: docs/golden-hypothesis-pkq-vs-codex.md
 run_name: golden_hypothesis_plan-keeps-question_5q_3attempts_20261120
 runs_dir: runs
 n_attempts: 3

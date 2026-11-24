@@ -1,5 +1,7 @@
 # Golden hypothesis (oracle ablation)
 
+With plan_keeps_question on, and compared with Codex given the same candidates: [golden-hypothesis-pkq-vs-codex.md](golden-hypothesis-pkq-vs-codex.md).
+
 ## Question
 
 The runs 2 baseline had the correct answer among the round-1 hypotheses in 18 of 30 attempts. It never had it for hb024, hb048 and recaikavdwoimjy3b, and it had it but lost it in some attempts of hb035 and recsvhviava5okg19.

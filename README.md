@@ -169,9 +169,12 @@ copy equal to SHELDON's). The run name lists the adaptations that are on. `[all]
 two the dated `all` configs ran with, `early_stop` and `shared_analysis_state`; every later
 adaptation is switched on by name, so those configs keep their meaning.
 
-**Which to use from now on.** Always include `plan_keeps_question`: it fixes a real bug, where in
-7 of 30 baseline attempts the stages before finalize never saw the question. The current setting
-is `[early_stop, shared_analysis_state, plan_keeps_question]` (`configs/sheldon_pkq_es_ss_10q.yaml`).
+**Which to use from now on.** Always include `plan_keeps_question`. It fixes a real bug: in 7 of
+30 baseline attempts the stages before finalize never saw the question. It does not raise the
+score: on the ten 10q questions it gets 16/30, against 17/30 with `early_stop` and
+`shared_analysis_state` alone, within the spread of 3 attempts (`runs/pkq_es_ss_10q_3attempts_20261122`).
+Keep it because a run that never sees its question is not a valid run, and look for gains elsewhere.
+The current setting is `[early_stop, shared_analysis_state, plan_keeps_question]` (`configs/sheldon_pkq_es_ss_10q.yaml`).
 Leave `candidate_scan`, `keep_answer_rivals` and `keep_neutral_hypotheses` off. They were tested
 and did not help ([candidate-scan.md](docs/candidate-scan.md), [answer-rivals.md](docs/answer-rivals.md)),
 and they stay in the code only so those runs can be reproduced. The golden hypothesis is an
@@ -189,7 +192,7 @@ uv run bmbench run -c configs/sheldon_adapted_preview.yaml                      
 | `early_stop` | Ends the run after a round early, before the round cap, once the settled case is closed, then finalizes as usual (stop reason `settled`). One extra tool-less call reads the record; fixed rules decide, from SHELDON's own verdicts: the lead answers the whole question, has at least 1 supporting and no refuting observation, there is at least one rival hypothesis and each has more refuting than supporting observations, and no untested rival or open issue is left. `scripts/replay_early_stop.py` replays the check on a finished run. |
 | `shared_analysis_state` | Shares an attempt-local ledger of downloads, lookups and reported findings across stages and rounds. Each parallel test gets a stable directory across its local iterations and a structured history handoff. Observations, candidates and lookups are recorded automatically; `download_analysis` reuses completed downloads and serializes concurrent requests for the same URL. |
 | `candidate_scan` | **Off: no effect.** Not in `[all]`. After plan, one tool-using stage lists the candidate answers the data supports (3 to 10, each with evidence), plus method and data-quality questions as tests. Only an offline recall mode exists: it requires `candidate_scan_only: true`, and the run stops after the scan. `candidate_scan_mode: structured` splits the scan into two isolated calls: `structure` maps the data into full tables and features (strong signals, families sharing a sub-signal, sample groupings) without proposing answers, then `identify` names each feature through reference lookups and lists candidates with the features each explains (`configs/sheldon_structure_scan_recall_*.yaml`, run by `scripts/run_sheldon_structure_scan.py`). `scripts/eval_candidate_recall.py` grades each candidate with the official grader. Results: [docs/candidate-scan.md](docs/candidate-scan.md). |
-| `plan_keeps_question` | **Keep on.** Not in `[all]`. If SHELDON's plan split moves the question sentence out of `situation` (the only part the stages before finalize see), the split is undone and `situation` becomes the whole statement. Every check is logged. Results: [docs/plan-keeps-question.md](docs/plan-keeps-question.md). |
+| `plan_keeps_question` | **Keep on.** Not in `[all]`. If SHELDON's plan split moves the question sentence out of `situation` (the only part the stages before finalize see), the split is undone and `situation` becomes the whole statement. Every check is logged. Fixes the bug; 16/30 vs 17/30 on 10q (no gain). Results: [docs/plan-keeps-question.md](docs/plan-keeps-question.md). |
 | `keep_answer_rivals` | **Off: no effect** ([docs/answer-rivals.md](docs/answer-rivals.md)). Not in `[all]`. After each round, a claim shelved because a local loop revised it or exploit refined it is compared with its replacement in one tool-less call. If the two give different answers, the shelved claim is kept as a live rival. A failed call changes nothing. Exploit can still shelve the rival later on its evidence. |
 | `keep_neutral_hypotheses` | **Off: no effect** (same doc). Not in `[all]`. After each round, a claim that exploit shelved with no supporting and no refuting observation (it could not be checked, as opposed to being refuted) is kept instead. Shelving by select or by a local loop is unaffected. No model call. |
 
@@ -218,6 +221,12 @@ position. They go in the prompt, in a "Candidate hypotheses" section, as unverif
 from a preliminary exploration, with nothing marking the golden one. The prompt goes only into
 the host file `attempt-N/stdin.main.txt`, and the golden position is recorded in
 `attempt-N/golden_hint.json`. Config: `configs/codex_golden_hypothesis_5q.yaml` (bmbench/golden_hints.py).
+With plan_keeps_question on (`configs/sheldon_golden_hypothesis_pkq_5q.yaml`), SHELDON gets 6/15
+and Codex with the same candidates 10/15: [docs/golden-hypothesis-pkq-vs-codex.md](docs/golden-hypothesis-pkq-vs-codex.md).
+How the candidates are injected into Codex, and why SHELDON uses the golden hypothesis worse than Codex (from the trajectories): [docs/sheldon-vs-codex.md](docs/sheldon-vs-codex.md).
+Stdin files and `prompt.md` are written with LF on every platform. A sentinel left in the prompt
+(as CRLF caused on Windows, leaking the answer) stops the attempt, and the audit script counts
+sentinels in each trace.
 
 `configs/sheldon_adapted_*.yaml` uses `[all]`, which enables `early_stop` and
 `shared_analysis_state` only. To measure shared state alone:
