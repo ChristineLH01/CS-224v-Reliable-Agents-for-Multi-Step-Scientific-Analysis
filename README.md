@@ -228,6 +228,31 @@ Stdin files and `prompt.md` are written with LF on every platform. A sentinel le
 (as CRLF caused on Windows, leaking the answer) stops the attempt, and the audit script counts
 sentinels in each trace.
 
+#### Per-stage models
+
+`agent.stage_models` (SHELDON call tag → model) sends the calls of those stages to another
+model; every other call uses `agent.model`. A tag also routes its dotted children
+(`candidate_analysis` covers `candidate_analysis.h3.1`). The tags are `plan`,
+`session.explore`, `session.select`, `candidate_analysis`, `session.comparative_analysis`,
+`session.exploit` and `finalize`. Each model other than `agent.model` needs a price in
+`agent.usd_per_mtok_by_model` (`[input, cached input, output]` USD/Mtok). Attempt costs are
+summed per model from the trace (`tokens.by_model` in result.json).
+
+Encrypted reasoning replays only to the model that wrote it. When a session conversation
+moves to another model, earlier replies are sent without their reasoning items, but with
+their text and tool calls. `doctor --auth-check` continues a conversation on each stage
+model to check this.
+
+The motivation: SHELDON spends 7–11% of its cost proposing (plan, explore), and 70–80%
+testing. Codex on gpt-6.1-sol scored 24/30 against 17/30 on gpt-6-luna. Its gains were
+hb048, where it named the drug from the data, and recsvhviava5okg19, where it chose the
+pooled reading.
+
+`configs/sheldon_stage_models_pilot.yaml` runs gpt-6.1-sol for plan, explore and finalize
+and gpt-6-luna for the rest, on those two questions (image `bmbench-sandbox:stage-models`).
+`configs/sheldon_stage_models_rest8.yaml` runs the same config on the other 8 questions.
+Together the two runs cover the 10q set.
+
 `configs/sheldon_adapted_*.yaml` uses `[all]`, which enables `early_stop` and
 `shared_analysis_state` only. To measure shared state alone:
 

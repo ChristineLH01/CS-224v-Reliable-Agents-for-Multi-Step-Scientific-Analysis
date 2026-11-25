@@ -24,6 +24,13 @@ to them, so traces do not fill up with encrypted blobs.
 
 Only the transport changes: SHELDON builds the same requests, and the stage
 prompts, tools, loop and parsing are its own.
+
+Per-stage models (`stage_models`: call tag -> model). A call whose tag is a routed stage
+("plan", "session.explore", "finalize", or a dotted child of one) goes to that stage's
+model instead of the run's. Encrypted reasoning only replays to the model that wrote it,
+so when a conversation continues on another model its earlier replies are replayed
+without their reasoning items (their text and tool calls stay). Each reply is priced at
+its own model's rate (`usd_per_mtok_by_model`, falling back to `usd_per_mtok`).
 """
 
 from __future__ import annotations
@@ -89,7 +96,8 @@ class ResponsesBackend(Backend):
 
     def __init__(self, *, base_url: str, api_key: str, effort: str | None = "high",
                  usd_per_mtok: list[float] | tuple[float, ...] | None = None, max_retries: int = 2,
-                 client: Any = None) -> None:
+                 client: Any = None,
+                 usd_per_mtok_by_model: dict[str, list[float]] | None = None) -> None:
         if client is None:
             from openai import AsyncOpenAI  # noqa: PLC0415
 
@@ -98,14 +106,18 @@ class ResponsesBackend(Backend):
         self.client = client
         self.effort = effort
         self.prices = tuple(usd_per_mtok) if usd_per_mtok else None
+        self.prices_by_model = {m: tuple(p) for m, p in (usd_per_mtok_by_model or {}).items() if p}
         #: reference -> the raw output items of one reply, replayed with later turns
         self._items: dict[str, list[dict[str, Any]]] = {}
+        #: reference -> the model that wrote that reply (its reasoning replays only to it)
+        self._item_model: dict[str, str] = {}
         self._warned: set[str] = set()
 
     # -- request ------------------------------------------------------------------
 
     def _input(self, req: dict[str, Any]) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
+        target = req.get("model")
         for message in req["messages"]:
             role, content = message.get("role"), message.get("content")
             if isinstance(content, str):
@@ -115,7 +127,11 @@ class ResponsesBackend(Backend):
             if role == "assistant":
                 ref = next((b.get("ref") for b in blocks if b.get("type") == ITEMS_BLOCK), None)
                 if ref and ref in self._items:
-                    items.extend(self._items[ref])  # the reply exactly as it came, reasoning included
+                    replay = self._items[ref]  # the reply exactly as it came, reasoning included
+                    if self._item_model.get(ref, target) != target:
+                        # written by another model: its encrypted reasoning cannot go to this one
+                        replay = [i for i in replay if i.get("type") != "reasoning"]
+                    items.extend(replay)
                     continue
                 # A reply this process did not receive (a test fixture, say): rebuild it
                 # from its text and tool calls, without reasoning.
@@ -228,6 +244,7 @@ class ResponsesBackend(Backend):
         # call's arguments may be half-written. Only its text is replayed, since a call with
         # no output, or reasoning with no item after it, makes the next turn fail.
         self._items[ref] = [i for i in raw if i.get("type") == "message"] if cut else raw
+        self._item_model[ref] = req["model"]
         text = getattr(response, "output_text", None)
         if text is None:
             text = "".join(p.get("text", "") for i in raw if i.get("type") == "message"
@@ -268,8 +285,9 @@ class ResponsesBackend(Backend):
         cached = int(getattr(getattr(u, "input_tokens_details", None), "cached_tokens", 0) or 0)
         out = int(getattr(u, "output_tokens", 0) or 0)  # reasoning included
         usage = Usage(calls=1, input_tokens=max(0, total_in - cached), output_tokens=out, cache_read_tokens=cached)
-        if self.prices:
-            p_in, p_cached, p_out = self.prices
+        prices = self.prices_by_model.get(model) or self.prices
+        if prices:
+            p_in, p_cached, p_out = prices
             usage.cost_usd = (usage.input_tokens * p_in + cached * p_cached + out * p_out) / 1e6
         else:
             usage.cost_usd = estimate_cost(model, usage)
@@ -282,17 +300,34 @@ class ResponsesLLM(LLM):
     Claude models."""
 
     def __init__(self, *, base_url: str, api_key: str, usd_per_mtok: list[float] | None = None,
-                 client: Any = None, **kwargs: Any) -> None:
+                 client: Any = None, stage_models: dict[str, str] | None = None,
+                 usd_per_mtok_by_model: dict[str, list[float]] | None = None, **kwargs: Any) -> None:
         kwargs.setdefault("provider", "openai")
         super().__init__(base_url=base_url, api_key=api_key, **kwargs)
         self._usd_per_mtok = usd_per_mtok
+        self._usd_per_mtok_by_model = dict(usd_per_mtok_by_model or {})
         self._client = client
+        self.stage_models = {str(k).strip(): str(v).strip() for k, v in (stage_models or {}).items()
+                             if str(k).strip() and str(v).strip()}
+
+    def stage_model(self, tag: str) -> str | None:
+        """The model a call with this tag goes to: the longest routed stage that is the tag
+        or a dotted prefix of it, or None for the run's model."""
+        hits = [s for s in self.stage_models if tag == s or tag.startswith(s + ".")]
+        return self.stage_models[max(hits, key=len)] if hits else None
+
+    async def _cached(self, req: dict[str, Any], schema: type[BaseModel] | None, tag: str) -> LLMResult:
+        routed = self.stage_model(tag or "")
+        if routed and req.get("model") == self.model:  # an explicit model= on the call wins
+            req = {**req, "model": routed}
+        return await super()._cached(req, schema, tag)
 
     def _backend(self) -> Backend:
         if self._backend_impl is None:
             self._backend_impl = ResponsesBackend(base_url=self.base_url or "", api_key=self.api_key or "",
                                                   effort=self.effort, usd_per_mtok=self._usd_per_mtok,
-                                                  client=self._client)
+                                                  client=self._client,
+                                                  usd_per_mtok_by_model=self._usd_per_mtok_by_model)
         return self._backend_impl
 
 

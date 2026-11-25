@@ -3,7 +3,9 @@
     stdin    the problem prompt (prompts/problem.md, rendered by bmbench)
     env      BMB_SHELDON_CONFIG  JSON: {"sheldon": <SHELDON Config fields>, "usd_per_mtok": [...],
                                        "adaptations": [...], "workdir": "/workspace",
-                                       "home": "/home/agent/.sheldon"}
+                                       "home": "/home/agent/.sheldon",
+                                       "stage_models": {tag: model}, optional,
+                                       "usd_per_mtok_by_model": {model: [...]}, optional}
              LITELLM_BASE_URL, LITELLM_API_KEY   the model endpoint (the key passed by name)
     argv     --time-limit S   the attempt's limit: SHELDON's `max_seconds`, and the moment
                               its running commands are stopped (see watchdog.py)
@@ -100,7 +102,9 @@ def make_llm(cfg: Any, conf: dict[str, Any]) -> Any:
         raise RuntimeError("LITELLM_BASE_URL and LITELLM_API_KEY must be set (invalid api key: none given)")
     return ResponsesLLM(base_url=base, api_key=key, usd_per_mtok=conf.get("usd_per_mtok"), model=cfg.model,
                         effort=cfg.effort, max_tokens=cfg.max_tokens, thinking=cfg.thinking,
-                        cache=DiskCache(enabled=False), concurrency=4, trace_prompts=cfg.trace_prompts)
+                        cache=DiskCache(enabled=False), concurrency=4, trace_prompts=cfg.trace_prompts,
+                        stage_models=conf.get("stage_models") or {},
+                        usd_per_mtok_by_model=conf.get("usd_per_mtok_by_model") or {})
 
 
 def quiet_stream_shutdown(loop: asyncio.AbstractEventLoop) -> None:
@@ -157,7 +161,8 @@ async def run_sheldon(prompt: str, conf: dict[str, Any], time_limit_s: float, ou
     llm = llm or make_llm(cfg, conf)
     emit(out, "start", sheldon_commit=SHELDON_COMMIT, runtime=__version__, run_id=cfg.run_id, model=cfg.model,
          effort=cfg.effort, mode=cfg.params.get("mode", "staged"), max_rounds=cfg.max_rounds,
-         adaptations=cfg.params.get("adaptations", []), time_limit_s=time_limit_s)
+         adaptations=cfg.params.get("adaptations", []), stage_models=conf.get("stage_models") or {},
+         time_limit_s=time_limit_s)
     limit = TimeLimit(deadline).start()
     error = ""
     try:
@@ -238,13 +243,19 @@ async def ping(conf: dict[str, Any], out: Any) -> dict[str, Any]:
         s = await llm.complete("Which species is the gene BRCA1 best known from? Answer as JSON.", schema=Organism,
                                tag="ping")
         checks["structured"] = s.parsed is not None and "sapiens" in s.parsed.species.lower()
+        # each per-stage model: the conversation so far, continued on it (its replies came
+        # from the run's model, so this also checks that their reasoning is left out)
+        for m in sorted(set((conf.get("stage_models") or {}).values()) - {cfg.model}):
+            c3 = await llm.converse("Reply with the token in upper case, nothing else.", tools=[tool],
+                                    execute=execute, history=c.messages, max_iterations=2, model=m, tag="ping")
+            checks[f"stage_model {m}"] = token.upper() in c3.text.replace(" ", "")
         error = ""
     except Exception as e:  # noqa: BLE001
         error = f"{type(e).__name__}: {e}"
     finally:
         with contextlib.suppress(Exception):
             await llm.aclose()
-    ok = not error and len(checks) == 4 and all(checks.values())
+    ok = not error and len(checks) >= 4 and all(checks.values())
     result = {"answer": "OK" if ok else "", "final_text": "OK" if ok else f"FAILED {checks} {error}".strip(),
               "error": error, "checks": checks, "model": cfg.model, "effort": cfg.effort,
               "usage": llm.total.to_dict()}

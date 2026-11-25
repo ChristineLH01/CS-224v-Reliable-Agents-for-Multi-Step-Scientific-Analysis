@@ -89,6 +89,14 @@ class AgentConfig:
     # round-1 hypotheses of the same attempt there (the golden one among them, unmarked) as
     # unverified candidates (bmbench/golden_hints.py). None: the prompt unchanged.
     golden_hypotheses_from: str | None = None
+    # SHELDON only: SHELDON call tag -> model, for the calls of those stages (a tag routes its
+    # dotted children too: "candidate_analysis" covers "candidate_analysis.h3.1"). Every
+    # other call uses `model`. E.g. {plan: gpt-6.1-sol, session.explore: gpt-6.1-sol,
+    # finalize: gpt-6.1-sol}: a stronger model proposes and decides, `model` tests.
+    stage_models: dict[str, str] = field(default_factory=dict)
+    # (input, cached input, output) USD per million tokens for each model in stage_models
+    # other than `model` (which uses usd_per_mtok).
+    usd_per_mtok_by_model: dict[str, list[float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -267,6 +275,17 @@ def load_config(path: str | Path | None, overrides: list[str] | None = None) -> 
             raise ValueError("agent.golden_hypotheses_from is for agents other than SHELDON (use golden_answers)")
         if not (resolve(agent["golden_hypotheses_from"]) / "problems").is_dir():
             raise ValueError(f"agent.golden_hypotheses_from: no run at {agent['golden_hypotheses_from']}")
+    if isinstance(agent, dict) and (agent.get("stage_models") or agent.get("usd_per_mtok_by_model")):
+        if agent.get("type", AgentConfig.type) != "sheldon":
+            raise ValueError("agent.stage_models is for the SHELDON agent only")
+        prices = agent.get("usd_per_mtok_by_model") or {}
+        for model, p in prices.items():
+            if not (isinstance(p, list) and len(p) == 3 and all(isinstance(x, (int, float)) for x in p)):
+                raise ValueError(f"agent.usd_per_mtok_by_model.{model}: give [input, cached input, output] USD/Mtok")
+        unpriced = sorted({str(m) for m in (agent.get("stage_models") or {}).values()}
+                          - {str(agent.get("model", AgentConfig.model))} - set(prices))
+        if unpriced:
+            raise ValueError(f"agent.usd_per_mtok_by_model has no price for stage model(s): {', '.join(unpriced)}")
     if isinstance(agent, dict) and agent.get("adaptations"):
         if agent.get("type", AgentConfig.type) != "sheldon":
             raise ValueError("agent.adaptations is for the SHELDON agent only")

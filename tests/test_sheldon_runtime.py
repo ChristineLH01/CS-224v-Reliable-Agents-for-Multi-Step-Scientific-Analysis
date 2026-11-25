@@ -197,6 +197,40 @@ def test_reasoning_items_replayed_on_the_next_turn():
     assert "ENC" not in json.dumps(convo.messages)
 
 
+def test_stage_models_route_by_tag_drop_foreign_reasoning_and_price_per_model():
+    """A routed stage's calls go to its model. A conversation that moves from one model
+    to another replays the earlier replies without their encrypted reasoning, and each
+    reply is priced at its own model's rate."""
+    sol = [2.0, 0.10, 10.0]
+    client = FakeClient(response([REASONING, CALL]), response([MESSAGE], text="done"),
+                        response([MESSAGE], text="next"), response([MESSAGE], text="plain"))
+    llm = ResponsesLLM(base_url="http://x/v1", api_key="k", usd_per_mtok=PRICES, client=client,
+                       model="gpt-6-luna", effort="high", cache=DiskCache(enabled=False),
+                       stage_models={"session.explore": "gpt-6.1-sol"},
+                       usd_per_mtok_by_model={"gpt-6.1-sol": sol})
+    assert llm.stage_model("session.explore") == "gpt-6.1-sol"
+    assert llm.stage_model("session.explore.x") == "gpt-6.1-sol"
+    assert llm.stage_model("session.exploration") is None and llm.stage_model("candidate_analysis.h1.1") is None
+    tool = {"name": "run_shell", "description": "shell",
+            "input_schema": {"type": "object", "properties": {"command": {"type": "string"}}}}
+
+    async def execute(name, args):
+        return "ran"
+
+    first = asyncio.run(llm.converse("look", tools=[tool], execute=execute, max_iterations=3, tag="session.explore"))
+    assert [c["model"] for c in client.calls] == ["gpt-6.1-sol", "gpt-6.1-sol"]
+    assert REASONING in client.calls[1]["input"]  # same model: reasoning replayed
+    assert first.usage.cost_usd == pytest.approx(2 * (90 * 2.0 + 10 * 0.10 + 20 * 10.0) / 1e6)
+    asyncio.run(llm.converse("test", tools=[tool], execute=execute, history=first.messages, max_iterations=1,
+                             tag="session.comparative_analysis"))
+    third = client.calls[2]
+    assert third["model"] == "gpt-6-luna"
+    assert REASONING not in third["input"] and CALL in third["input"]  # sol's reasoning not sent to luna
+    plain = asyncio.run(llm.complete("hi", tag="candidate_analysis.h1.1"))
+    assert client.calls[3]["model"] == "gpt-6-luna"
+    assert plain.usage.cost_usd == pytest.approx((90 * 0.10 + 10 * 0.01 + 20 * 0.50) / 1e6)
+
+
 def test_stream_errors_carry_a_status_for_sheldons_retries():
     b = backend(FakeClient([SimpleNamespace(type="error", code="rate_limit_exceeded", message="slow down")]))
     with pytest.raises(ResponsesStreamError) as e:

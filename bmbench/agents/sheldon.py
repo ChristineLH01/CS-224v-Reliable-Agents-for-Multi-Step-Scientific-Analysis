@@ -86,6 +86,9 @@ class SheldonAgent(Agent):
     def env(self) -> dict[str, str]:
         conf = {"sheldon": self.sheldon_config(), "usd_per_mtok": self.cfg.usd_per_mtok,
                 "adaptations": list(self.cfg.adaptations), "workdir": WORKDIR, "home": HOME}
+        if self.cfg.stage_models:
+            conf["stage_models"] = dict(self.cfg.stage_models)
+            conf["usd_per_mtok_by_model"] = {m: list(p) for m, p in self.cfg.usd_per_mtok_by_model.items()}
         env = {"BMB_SHELDON_CONFIG": json.dumps(conf)}
         try:
             env["LITELLM_BASE_URL"] = litellm_base_url()
@@ -138,6 +141,9 @@ class SheldonAgent(Agent):
             segment.usage = _tokens(usage)
             segment.num_turns = int(usage.get("calls") or 0)
             segment.cost_usd = self.cost_from_tokens(segment.usage) or 0.0
+            if self.cfg.stage_models and isinstance(usage.get("cost_usd"), (int, float)):
+                # the driver priced each call at its own model's rate; these totals mix models
+                segment.cost_usd = float(usage["cost_usd"])
             hit = bool(result.get("time_limit_hit"))
             segment.closed_out = hit and segment.answer is not None
             segment.timed_out = hit
@@ -155,27 +161,58 @@ class SheldonAgent(Agent):
 
     # -- what SHELDON recorded ----------------------------------------------------------
 
-    def session_usage(self, session_root: Path) -> dict[str, int] | None:
+    def session_usage(self, session_root: Path) -> dict[str, Any] | None:
         totals: Counter[str] = Counter()
+        by_model: dict[str, Counter[str]] = {}
         for trace in traces(session_root):
             for event in read_events(trace):
                 if event.get("kind") == "llm":
+                    model = self.priced_model(str(event.get("model") or ""))
                     for k, v in (event.get("usage") or {}).items():
                         if isinstance(v, (int, float)) and k != "cost_usd":
                             totals[k] += int(v)
+                            by_model.setdefault(model, Counter())[k] += int(v)
         if not totals:
             return None
-        out = _tokens(totals)
+        out: dict[str, Any] = _tokens(totals)
         out["api_messages"] = totals.get("calls", 0)
+        if self.cfg.stage_models:  # tokens per model, each priced at its own rate
+            out["by_model"] = {m: {**_tokens(c), "api_messages": c.get("calls", 0)} for m, c in by_model.items()}
         return out
 
-    def cost_from_tokens(self, tokens: dict[str, int] | None) -> float | None:
+    def prices(self) -> dict[str, list[float]]:
+        """Model -> (input, cached input, output) USD/Mtok: the run's model, then the stage models."""
+        out = {m: list(p) for m, p in (self.cfg.usd_per_mtok_by_model or {}).items()}
+        if self.cfg.usd_per_mtok:
+            out[self.cfg.model] = list(self.cfg.usd_per_mtok)
+        return out
+
+    def priced_model(self, reported: str) -> str:
+        """The configured model a reply came from. The proxy reports a prefixed name with
+        dots turned into dashes ("system.ai.gpt-6-1-sol" for gpt-6.1-sol); unknown names
+        count as the run's model."""
+        def norm(name: str) -> str:
+            return name.strip().lower().replace(".", "-").replace("/", "-")
+
+        got = norm(reported)
+        hits = [m for m in self.prices() if got == norm(m) or got.endswith("-" + norm(m))]
+        return max(hits, key=len) if hits else self.cfg.model
+
+    def cost_from_tokens(self, tokens: dict[str, Any] | None) -> float | None:
         if not tokens or not self.cfg.usd_per_mtok:
             return None
-        usd_in, usd_cached, usd_out = self.cfg.usd_per_mtok
-        return ((tokens.get("input_tokens", 0) + tokens.get("cache_creation_input_tokens", 0)) * usd_in
-                + tokens.get("cache_read_input_tokens", 0) * usd_cached
-                + tokens.get("output_tokens", 0) * usd_out) / 1e6
+        prices = self.prices()
+
+        def priced(t: dict[str, Any], p: list[float]) -> float:
+            usd_in, usd_cached, usd_out = p
+            return ((t.get("input_tokens", 0) + t.get("cache_creation_input_tokens", 0)) * usd_in
+                    + t.get("cache_read_input_tokens", 0) * usd_cached
+                    + t.get("output_tokens", 0) * usd_out) / 1e6
+
+        by_model = tokens.get("by_model")
+        if by_model:
+            return sum(priced(t, prices.get(m) or self.cfg.usd_per_mtok) for m, t in by_model.items())
+        return priced(tokens, self.cfg.usd_per_mtok)
 
     def subagent_segments(self, session_root: Path) -> list[Segment]:
         """SHELDON's work, from its trace and retrieval files: what the audit and

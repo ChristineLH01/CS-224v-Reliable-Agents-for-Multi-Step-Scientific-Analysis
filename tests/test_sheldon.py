@@ -327,3 +327,39 @@ def test_golden_answers_can_be_read_from_a_file(tmp_path):
                    "sheldon: {params: {mode: session}}}\n")
     with pytest.raises(ValueError, match="no file"):
         load_config(cfg)
+
+
+def test_stage_models_reach_the_driver_and_each_model_is_priced_at_its_rate(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("agent: {type: sheldon, model: gpt-6-luna, usd_per_mtok: [0.1, 0.01, 0.5],\n"
+                   "        stage_models: {session.explore: gpt-6.1-sol, finalize: gpt-6.1-sol},\n"
+                   "        usd_per_mtok_by_model: {gpt-6.1-sol: [2.0, 0.1, 10.0]}}\n")
+    a = SheldonAgent(load_config(cfg).agent)
+    conf = json.loads(a.env()["BMB_SHELDON_CONFIG"])
+    assert conf["stage_models"] == {"session.explore": "gpt-6.1-sol", "finalize": "gpt-6.1-sol"}
+    assert conf["usd_per_mtok_by_model"] == {"gpt-6.1-sol": [2.0, 0.1, 10.0]}
+    # the proxy reports prefixed names
+    assert a.priced_model("system.ai.gpt-6.1-sol") == "gpt-6.1-sol"
+    assert a.priced_model("system.ai.gpt-6-1-sol") == "gpt-6.1-sol"  # what the proxy actually reports
+    assert a.priced_model("system.ai.gpt-6-luna") == "gpt-6-luna" and a.priced_model("") == "gpt-6-luna"
+    run = tmp_path / "agent_session" / "sheldon" / "runs" / "r" / "traces"
+    run.mkdir(parents=True)
+    events = [{"kind": "llm", "model": "system.ai.gpt-6-luna", "usage": _usage(1_000_000, 0)},
+              {"kind": "llm", "model": "system.ai.gpt-6-1-sol", "usage": _usage(1_000_000, 0)}]
+    with gzip.open(run / "problem.jsonl.gz", "wt") as f:
+        f.write("\n".join(json.dumps(e) for e in events) + "\n")
+    tokens = a.session_usage(tmp_path / "agent_session")
+    assert tokens["input_tokens"] == 2_000_000 and set(tokens["by_model"]) == {"gpt-6-luna", "gpt-6.1-sol"}
+    assert a.cost_from_tokens(tokens) == pytest.approx(0.1 + 2.0 + 10 * (0.01 + 0.1) / 1e6)
+
+
+def test_stage_models_need_sheldon_and_a_price(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("agent: {type: sheldon, model: gpt-6-luna, stage_models: {plan: gpt-6.1-sol}}\n")
+    with pytest.raises(ValueError, match="no price for stage model"):
+        load_config(cfg)
+    cfg.write_text("agent: {type: codex, stage_models: {plan: gpt-6.1-sol}}\n")
+    with pytest.raises(ValueError, match="SHELDON agent only"):
+        load_config(cfg)
+    cfg.write_text("agent: {type: sheldon, model: gpt-6-luna, stage_models: {plan: gpt-6-luna}}\n")
+    assert load_config(cfg).agent.stage_models == {"plan": "gpt-6-luna"}  # the run's own model needs no extra price

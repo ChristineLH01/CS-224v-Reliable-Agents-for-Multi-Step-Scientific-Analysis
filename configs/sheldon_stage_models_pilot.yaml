@@ -1,0 +1,104 @@
+# Per-stage models, pilot: gpt-6.1-sol proposes (plan, explore) and decides (finalize);
+# gpt-6-luna runs everything else (selection, candidate analysis, comparative analysis,
+# exploit). On the two questions where Codex on sol beat Codex on luna:
+#   hb048 (sol named diphenhydramine from the data) and recsvhviava5okg19 (sol chose the
+#   pooled reading, SBS3). 3 attempts each.
+# Otherwise configs/sheldon_pkq_es_ss_10q.yaml verbatim (16/30 overall; 0/3 on both questions),
+# on image bmbench-sandbox:stage-models (its runtime adds agent.stage_models).
+run_name: stage_models_sol_propose_decide_pilot_3attempts_20261123
+runs_dir: runs
+n_attempts: 3
+concurrency: 2
+prompt_template: prompts/problem.md
+dataset:
+  name: full
+  root: data
+  problem_ids:
+  - hb048
+  - recsvhviava5okg19
+  human_solvable: null
+  delete_after_problem: false
+agent:
+  type: sheldon
+  model: gpt-6-luna
+  effort: high
+  permission_mode: bypassPermissions
+  disallowed_tools:
+  - WebSearch
+  - AskUserQuestion
+  max_budget_usd: null
+  usd_per_mtok:
+  - 0.1
+  - 0.01
+  - 0.5
+  extra_args: []
+  env: {}
+  finalize_on_timeout: true
+  finalize_timeout_s: 300
+  max_nudges: 1
+  sheldon:
+    method: sheldon
+    engine: toolloop
+    max_rounds: 3
+    max_calls: null
+    max_usd: null
+    max_tokens: 16000
+    trace_prompts: true
+    params:
+      mode: session
+      rounds: 3
+      plan: true
+      n_initial: 3
+      n_explore: 3
+      select_k: 3
+      candidate_analysis_concurrent: true
+      candidate_analysis_max_evals: 3
+      stage_probes: true
+      explore_probe_calls: 20
+      finalize_probe_calls: 20
+      probes:
+      - run_shell:
+          max_output: 8000
+      candidate_analysis_probe_calls: 12
+      comparative_analysis_probe_calls: 10
+      select_probe_calls: 2
+      exploit_probe_calls: 4
+      analysis_summary_chars: 10000
+  stage_models:
+    plan: gpt-6.1-sol
+    session.explore: gpt-6.1-sol
+    finalize: gpt-6.1-sol
+  usd_per_mtok_by_model:
+    gpt-6.1-sol:
+    - 2.0
+    - 0.1
+    - 10.0
+  adaptations:
+  - early_stop
+  - shared_analysis_state
+  - plan_keeps_question
+sandbox:
+  image: bmbench-sandbox:stage-models
+  proxy_image: bmbench-proxy:latest
+  platform: null
+  cpus: 4
+  memory: 3.5g
+  timeout_s: 3600
+  network: allowlist
+  infra_domains:
+  - files.pythonhosted.org
+  extra_allowed_domains: []
+  override_allowed_domains: null
+  input_mode: copy
+  keep_workspace: false
+  keep_input_data: false
+grader:
+  auto: true
+  model: claude-opus-5-5
+  effort: medium
+  usd_per_mtok:
+  - 2.0
+  - 10.0
+  timeout_s: 600
+  max_action_log_chars: 150000
+  max_final_message_chars: 6000
